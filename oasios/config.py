@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
-# --- Configuration for OASIS Precursor Tracker ---
+# --- Configuration for OASIOS Precursor Tracker ---
 # This path is used by the DatabaseManager in tracker_v2
 TRACKER_DB_PATH = ROOT / "data" / "precursor_signals.db"
 

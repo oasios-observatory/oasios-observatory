@@ -32,7 +32,7 @@ except ImportError:
 
     settings = MockSettings()
     V3_DB_PATH = DEFAULT_DB_PATH
-    print(f"NOTICE: oasis.config not found. Using relative DB path: {V3_DB_PATH}")
+    print(f"NOTICE: oasios.config not found. Using relative DB path: {V3_DB_PATH}")
 
 # Check if DB exists to warn early
 if not V3_DB_PATH.exists():

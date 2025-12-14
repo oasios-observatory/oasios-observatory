@@ -1,7 +1,7 @@
 # oasios/m_generator/cli_s.py
 #!/usr/bin/env python3
 """
-OASIS Observatory Swarm CLI
+OASIOS Observatory Swarm CLI
 Runs parameter prompt immediately when executed.
 """
 import typer
@@ -17,7 +17,7 @@ app = typer.Typer(
 
 def interactive_prompt() -> dict:
     """Prompt user for all parameters."""
-    typer.echo(typer.style("\nOASIS Observatory multi-ASI s_generator", fg=typer.colors.CYAN, bold=True))
+    typer.echo(typer.style("\nOASIOS Observatory multi-ASI s_generator", fg=typer.colors.CYAN, bold=True))
     typer.echo("Generate classified intelligence briefing\n")
 
     while True:

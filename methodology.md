@@ -310,9 +310,9 @@ Phase	Technique	Output
 4. Validation	JSON Schema + logic checks	Guaranteed schema compliance
 5. Iteration	Continuous loop with new data	Adaptive scenario population
 
-This design is implementable inside your existing analyzer/ module (e.g., core_analyzer.py + linkage.py) and can run iteratively via a cron or scheduled CLI command (oasis evolve).
+This design is implementable inside your existing analyzer/ module (e.g., core_analyzer.py + linkage.py) and can run iteratively via a cron or scheduled CLI command (oasios evolve).
 
-🧠 OASIS Evolutionary Foresight Engine
+🧠 OASIOS Evolutionary Foresight Engine
 1. Overview
 
 Core process loop:
@@ -326,7 +326,7 @@ Core process loop:
 This loop maintains a population of scenarios that evolve as new signals (precursors) appear.
 
 2. High-Level Pseudocode
-def oasis_evolution_cycle():
+def oasios_evolution_cycle():
     # === STEP 1: Load Data ===
     precursors = load_precursor_signals()
     scenarios = load_scenarios()
@@ -499,15 +499,15 @@ def save_scenarios_to_db(scenarios):
 
 5. Evolution Cycle Scheduling
 Run hourly/daily via a CLI command:
-oasis evolve --retain-top 0.3 --mutate-rate 0.25
+oasios evolve --retain-top 0.3 --mutate-rate 0.25
 
 This command:
-Loads new precursors (oasis track all)
-Updates scenario probabilities (oasis analyze link)
-Evolves population (oasis evolve)
+Loads new precursors (oasios track all)
+Updates scenario probabilities (oasios analyze link)
+Evolves population (oasios evolve)
 
 6. Output Example (CLI Summary)
-OASIS Evolution Cycle — 2025-11-13
+OASIOS Evolution Cycle — 2025-11-13
 ─────────────────────────────────────
 Loaded 312 precursors, 28 scenarios
 Linked 96 signal→scenario pairs

@@ -9,7 +9,7 @@ from pathlib import Path
 
 # Page config
 st.set_page_config(
-    page_title="OASIS Observatory Viewer",
+    page_title="OASIOS Observatory Viewer",
     page_icon="🔭",
     layout="wide"
 )
@@ -176,7 +176,7 @@ def render_multi_asi_scenario(scenario):
 
 
 # Main UI
-st.title("🔭 OASIS Observatory Viewer")
+st.title("🔭 OASIOS Observatory Viewer")
 st.markdown("*Explore ASI scenario simulations*")
 
 # Sidebar for navigation
@@ -189,8 +189,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### About")
-    st.markdown("OASIS Observatory simulates trajectories of Artificial Superintelligence (ASI).")
-    st.markdown("[GitHub Repository](https://github.com/oasis-observatory/oasis-observatory)")
+    st.markdown("OASIOS Observatory simulates trajectories of Artificial Superintelligence (ASI).")
+    st.markdown("[GitHub Repository](https://github.com/oasios-observatory/oasios-observatory)")
 
 # Check database exists
 if not DB_PATH.exists():
@@ -284,4 +284,4 @@ elif view_mode == "Statistics":
 
 # Footer
 st.markdown("---")
-st.markdown("*Built with Streamlit | OASIS Observatory v0.1.1*")
+st.markdown("*Built with Streamlit | OASIOS Observatory v0.1.1*")

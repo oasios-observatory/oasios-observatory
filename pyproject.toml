@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "oasis-observatory"
+name = "oasios-observatory"
 version = "0.1.1-alpha"
 description = "OASIOS Observatory – ASI scenario generation and tracking"
 authors = ["Your Name <you@example.com>"]
 license = "MIT"
 readme = "README.md"
-packages = [{include = "oasis"}]
+packages = [{include = "oasios"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -36,7 +36,7 @@ ruff = "^0.6"
 mypy = "^1.11"
 
 [tool.poetry.scripts]
-oasis = "oasis.tracker.cli:app"
+oasios = "oasios.tracker.cli:app"
 
 [build-system]
 requires = ["poetry-core"]

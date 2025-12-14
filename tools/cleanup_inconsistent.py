@@ -15,7 +15,7 @@ from oasios.common.storage import Storage
 from oasios.common.consistency import NarrativeChecker
 
 # Initialize the Typer application
-app = typer.Typer(help="Tools for managing and cleaning the OASIS scenario database.")
+app = typer.Typer(help="Tools for managing and cleaning the OASIOS scenario database.")
 
 
 @app.command(name="check-and-clean")

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # report_generators/generate_report.py
 """
-OASIS OBSERVATORY – ASI Scenario Report Generator v12.2 (FIXED: ReportLab Style Error)
+OASIOS OBSERVATORY – ASI Scenario Report Generator v12.2 (FIXED: ReportLab Style Error)
 The Correlation, Radar, and Scatter Plot Edition.
 """
 
@@ -35,7 +35,7 @@ try:
     from oasios.common.storage import get_conn
     from oasios.logger import log
 except ImportError:
-    # Placeholder for environment where OASIS modules are not available
+    # Placeholder for environment where OASIOS modules are not available
     class MockLogger:
         def error(self, msg): print(f"ERROR: {msg}")
 
@@ -335,7 +335,7 @@ def build_project_info_page(styles):
     disclaimer_style = styles["Disclaimer"]
 
     content = [
-        Paragraph("🧠 <b>OASIS Observatory (Open Artificial Superintelligence Scenario Observatory)</b>",
+        Paragraph("🧠 <b>OASIOS Observatory (Open Artificial Superintelligence Scenario Observatory)</b>",
                   styles["Heading1"]),
         Spacer(1, 12),
 
@@ -357,7 +357,7 @@ def build_project_info_page(styles):
         # --- OVERVIEW (More Descriptive) ---
         Paragraph("<b>📘 Project Overview</b>", styles["Heading2"]),
         Paragraph(
-            "OASIS Observatory is an open, modular research platform dedicated to **forecasting and risk assessment** of Artificial Superintelligence (ASI) trajectories. It synthesizes inputs from narrative foresight, quantified behavioral indicators, and real-world AI development signals to generate and evaluate plausible high-impact futures. The platform provides a structured, transparent framework for researchers and policymakers to explore the complex dynamics of ASI alignment and control. This current iteration focuses exclusively on **Evidence-Based (EV) Scenarios** which are derived from specific precursor events tracked by the system.",
+            "OASIOS Observatory is an open, modular research platform dedicated to **forecasting and risk assessment** of Artificial Superintelligence (ASI) trajectories. It synthesizes inputs from narrative foresight, quantified behavioral indicators, and real-world AI development signals to generate and evaluate plausible high-impact futures. The platform provides a structured, transparent framework for researchers and policymakers to explore the complex dynamics of ASI alignment and control. This current iteration focuses exclusively on **Evidence-Based (EV) Scenarios** which are derived from specific precursor events tracked by the system.",
             styles["Normal"]
         ),
         Spacer(1, 12),
@@ -378,7 +378,7 @@ def build_project_info_page(styles):
         # --- METHODOLOGY (More Descriptive) ---
         Paragraph("<b>Methodology: The Closed-Loop System</b>", styles["Heading2"]),
         Paragraph(
-            "OASIS operates on a closed-loop probabilistic evolution model for ASI foresight. **Precursor signals** serve as evidential anchor points, guiding the generation of **scenarios** which act as structured hypotheses. These hypotheses are then evaluated using quantitative metrics (like Agency, Alignment, and Deceptiveness). The system is designed to evolve its scenarios dynamically, potentially using future optimization mechanisms (e.g., genetic algorithm-like processes) to weight, select, and refine scenarios based on incoming real-world data and risk scores.",
+            "OASIOS operates on a closed-loop probabilistic evolution model for ASI foresight. **Precursor signals** serve as evidential anchor points, guiding the generation of **scenarios** which act as structured hypotheses. These hypotheses are then evaluated using quantitative metrics (like Agency, Alignment, and Deceptiveness). The system is designed to evolve its scenarios dynamically, potentially using future optimization mechanisms (e.g., genetic algorithm-like processes) to weight, select, and refine scenarios based on incoming real-world data and risk scores.",
             styles["Normal"]
         ),
         Spacer(1, 12),
@@ -411,19 +411,19 @@ def build_project_info_page(styles):
     content += [
         Paragraph("<b>License & Use</b>", styles["Heading2"]),
         Paragraph(
-            "The OASIS Observatory code and data are released under the **MIT License**. They are open for academic, non-commercial research, and educational use. Any public distribution of derivative works must include proper citation.",
+            "The OASIOS Observatory code and data are released under the **MIT License**. They are open for academic, non-commercial research, and educational use. Any public distribution of derivative works must include proper citation.",
             styles["Normal"]),
         Spacer(1, 12),
 
         Paragraph("<b>Citation</b>", styles["Heading2"]),
         Paragraph(
-            "Bukhtoyarov, M. (2025). <i>OASIS Observatory: Open Artificial Superintelligence Scenario Modeling Platform (v0.3)</i>. "
+            "Bukhtoyarov, M. (2025). <i>OASIOS Observatory: Open Artificial Superintelligence Ontologies and Scenarios Observatory</i>. "
             "GitHub Repository.",
             styles["Normal"]
         ),
         Paragraph(
-            '<a href="https://github.com/oasis-observatory" color="blue">'
-            'https://github.com/oasis-observatory'
+            '<a href="https://github.com/oasios-observatory" color="blue">'
+            'https://github.com/oasios-observatory'
             '</a>',
             styles["Normal"]
         ),
@@ -439,7 +439,7 @@ def build_project_info_page(styles):
 def build_pdf(df: pd.DataFrame, nightmare: bool = False):
     ts = datetime.now().strftime("%Y%m%d_%H%M")
     mode = "_NIGHTMARE" if nightmare else ""
-    path = REPORT_DIR / f"OASIS_ASI_Report_EV_ONLY{mode}_{ts}.pdf"
+    path = REPORT_DIR / f"OASIOS_ASI_Report_EV_ONLY{mode}_{ts}.pdf"
     doc = SimpleDocTemplate(str(path), pagesize=A4, leftMargin=45, rightMargin=45, topMargin=80)
 
     styles = getSampleStyleSheet()
@@ -454,12 +454,12 @@ def build_pdf(df: pd.DataFrame, nightmare: bool = False):
     # ---------------------
     story = [
         Spacer(1, 3 * inch),
-        Paragraph("OASIS OBSERVATORY", styles["BigTitle"]),
+        Paragraph("OASIOS OBSERVATORY", styles["BigTitle"]),
         Paragraph("Artificial Superintelligence Scenarios", styles["Title"]),
         Spacer(1, 0.5 * inch),
         Paragraph(f"Generated {datetime.now():%B %d, %Y}", styles["Normal"]),
         Paragraph(
-            '<a href="https://github.com/oasis-observatory" color="blue">'
+            '<a href="https://github.com/oasios-observatory" color="blue">'
             'GitHub Repository: github.com/oasios-observatory'
             '</a>',
             styles["Normal"]

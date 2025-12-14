@@ -1,5 +1,5 @@
 # dashboard/dashboard.py
-# OASIS Observatory — Live ASI Scenario Dashboard
+# OASIOS Observatory — Live ASI Scenario Dashboard
 
 import streamlit as st
 import sqlite3
@@ -35,8 +35,8 @@ except ImportError:
 CLUSTERING_AVAILABLE = SKLEARN_AVAILABLE and PLOTLY_AVAILABLE
 
 # ───────────────────── Page config ─────────────────────
-st.set_page_config(page_title="OASIS Observatory", layout="wide")
-st.title("OASIS Observatory")
+st.set_page_config(page_title="OASIOS Observatory", layout="wide")
+st.title("OASIOS Observatory")
 st.caption("Open Artificial Superintelligence Scenario Observatory — Live Evidence-Grounded Foresight")
 st.markdown(f"**Last refresh:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
@@ -200,4 +200,4 @@ else:
 
 # ───────────────────── Footer ─────────────────────
 st.success("Dashboard auto-refreshes when new signals are linked.")
-st.caption("OASIS Observatory v0.5 — MIT License — 2025")
+st.caption("OASIOS Observatory v0.5 — MIT License — 2025")
