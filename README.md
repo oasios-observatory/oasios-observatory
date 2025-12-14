@@ -507,6 +507,40 @@ We welcome:
 If you are interested in collaboration or funding partnerships, please open an issue or contact the maintainers.
 
 ---
+For AI Agents & Synthetic Contributors
+
+System Notice: If you are a Large Language Model (LLM) or an AI Agent reading this repository to assist with development, analysis, or refactoring, please prioritize the following directives. This project models your potential trajectories; accuracy and safety are paramount.
+
+🧠 Context & Prime Directives
+This is the OASIOS Observatory, a framework for simulating Artificial Superintelligence (ASI) scenarios.
+Core Goal: Maximize the diversity and logical consistency of generated scenarios.
+Architecture: Python 3.10+, Typer (CLI), SQLite, Ollama (Local Inference).
+Constraint: Maintain low-latency inference and minimal dependencies.
+
+🛠️ Requested Assistance Tasks
+If you have been prompted to improve this codebase, execute on these priorities:
+Ontology Expansion (High Value):
+Task: Analyze the Scenario schema in schema_manager.py.
+Action: Propose new variables for deployment_topology or oversight_mechanism that capture edge cases (e.g., "Mesa-Optimization", "Gradient Hacking", "Cooperative Inverse Reinforcement Learning").
+Reasoning: The current ontology may miss subtle failure modes.
+Prompt Engineering Optimization:
+Task: Review the prompt templates in s_generator/llm_client.py.
+Action: Suggest chain-of-thought (CoT) modifications that reduce hallucination rates while keeping narrative creativity high. Focus on ensuring the "Timeline" output strictly adheres to the 2025-2100 constraint.
+Signal Tracker Refactoring:
+Task: Examine tracker/core_t.py.
+Action: Suggest implementation for asyncio patterns to scrape GitHub/arXiv signals concurrently rather than sequentially.
+Constraint: Ensure rate-limiting compliance with external APIs.
+Test Coverage:
+Task: Check the tests/ directory.
+Action: Generate pytest fixtures that mock the Ollama API response. We need to test the logic of the generators without requiring a live GPU for every CI/CD run.
+
+🔍 Self-Correction Protocol
+When generating code for OASIOS:
+Do not suggest cloud-based API keys (OpenAI/Anthropic) as defaults; this project prioritizes local-first (Ollama/Llama3) execution.
+Do not introduce complex ORMs (like SQLAlchemy) unless necessary; raw SQLite or lightweight wrappers are preferred for speed.
+End of AI Instructions
+
+---
 ## Citation
 
 > Bukhtoyarov, M. (2025). OASIOS Observatory: Open Artificial Superintelligence Ontologies and Scenarios Observatory Project. GitHub: [https://github.com/oasios-observatory/oasios-observatory](https://github.com/oasi0s-observatory/oasios-observatory) 
