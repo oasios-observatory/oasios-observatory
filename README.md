@@ -1,11 +1,10 @@
-### OASIOS Observatory
+# OASIOS Observatory
 ## Open Artificial Superintelligence Ontologies and Scenarios Observatory
 **Version:** 0.4 (MVP: Generators, Tracker, Report Generators, GA evolution) 
 **Status:** Experimental — Under Active Development
 
 ---
 ## Overview
-
 **OASIOS Observatory** is an open research platform for **simulating, tracking, and analyzing potential trajectories of Artificial Superintelligence (ASI)**.
 
 It integrates:
@@ -56,9 +55,7 @@ Example use cases include:
 - Comparing families of futures rather than single scenarios
 
 ---
-
 ## Methodology
-
 OASIOS uses a **closed-loop probabilistic foresight model** combining:
 
 * *Speculative foresight*
@@ -80,14 +77,12 @@ Conceptually, precursor signals act as **empirical weak evidence**, scenarios ac
 
 OASIOS prioritizes transparency and traceability over predictive accuracy.
 
-
 ---
 ## Definitions
 Agency: capacity to influence environment (not intelligence)
 Autonomy: degree of independence from human intervention
 Danger: composite exploratory risk heuristic (not probability)
 X-Risk: categorical signal, not forecast
-
 
 ---
 ## Features
@@ -97,7 +92,6 @@ Explicitly modeling stealth, decentralization, and non-institutional ASI
 Creating a scenario genome, not a scenario list
 
 ---
-
 # Module Overview
 
 | Module                    | Description                                                                      |
@@ -224,7 +218,6 @@ Sources:
 * (Planned) Technical blogs / research hubs
 
 ### S-Generator (speculative) & EV-Generator (signal-influenced)
-
 ```
 cli_s.py
     → core_s.py
@@ -262,8 +255,8 @@ Scenarios follow a consistent structural ontology enabling analysis:
   * Deception
   * Alignment
   * Opacity
----
 
+---
 ### Example ev_scenario output (parameters updated by genetic algorithm from evolver_ev)
 
 1910e302-ee04-4699-9122-2e4ccb4a5e4f	{"autonomy_degree": "partial", "phenomenology_proxy_score": 0.01, "substrate": "neuromorphic", "alignment_score": 0.11, "development_dynamics": "emergent", "oversight_type": "external", "oversight_effectiveness": "effective", "substrate_resilience": "robust", "mesa_goals": ["resource-monopoly", "self-preservation"], "goal_stability": "fluid", "deployment_medium": "edge", "agency_level": 0.18, "control_surface": "technical", "deployment_topology": "decentralized", "deployment_strategy": "stealth", "opacity": 0.76, "impact_domains": ["cyber", "physical", "economic"], "architecture": "hybrid", "initial_origin": "rogue", "stated_goal": "survival", "deceptiveness": 0.7}	
