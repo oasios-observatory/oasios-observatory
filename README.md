@@ -1,5 +1,5 @@
 ### OASIOS Observatory
-## **Open Artificial Superintelligence Ontologies and Scenarios Observatory
+## Open Artificial Superintelligence Ontologies and Scenarios Observatory
 **Version:** 0.4 (MVP: Generators, Tracker, Report Generators, GA evolution) 
 **Status:** Experimental — Under Active Development
 
@@ -451,7 +451,6 @@ Example schema:
 
 | Phase     | Focus                                       |
 | --------- | ------------------------------------------- |
-| **v0.4**  | Scenario weighting & evolutionary selection |
 | **v0.5**  | Dashboard for visualization & mapping       |
 | **v0.6+** | Public interface, web API, dataset exports  |
 
