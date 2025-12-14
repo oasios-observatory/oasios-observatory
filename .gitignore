@@ -1,0 +1,26 @@
+# Poetry
+__pycache__/
+*.pyc
+.coverage
+htmlcov/
+poetry.lock        # optional: keep if you want reproducible CI builds
+.env
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# Generated files
+requirements.txt
+dist/
+build/
+*.egg-info/
+
+# Database (SQLite)
+data/asi_precursors.db
+data/asi_scenarios.db
+/data/
