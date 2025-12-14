@@ -30,6 +30,17 @@ The system supports researchers, foresight practitioners, creators, and policyma
 5. Provide **visualization dashboards and analytics** (planned).
 
 ---
+## Why OASIOS Observatory?
+
+Long-term trajectories toward Artificial Superintelligence (ASI) are characterized by
+extreme uncertainty, sparse evidence, and strong cognitive biases. Most existing approaches
+to ASI futures rely on informal thought experiments, expert opinion, or isolated scenario
+writing exercises that are difficult to reproduce, compare, or update as new signals emerge.
+
+OASIOS Observatory exists to provide a structured, repeatable, and evidence-aware framework
+for exploring ASI futures—treating scenarios as evolving research artifacts rather than
+one-off narratives.
+---
 
 ## Methodology
 
@@ -468,6 +479,13 @@ OASIOS Observatory does not predict future. It offers structured exploration of 
 *This is a scenario planning tool, not a prediction engine
 *Outputs are illustrative hypotheticals, not forecasts
 *Value lies in expanding thinking, not narrowing probabilities
+
+## What OASIOS Is Not
+- A policy recommendation engine
+- A substitute for human judgment or expert analysis
+
+OASIOS is a research and exploration tool designed to augment human foresight by generating,
+organizing, and stress-testing possible ASI trajectories under uncertainty.
 
 ---
 
