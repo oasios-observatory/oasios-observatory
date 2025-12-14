@@ -582,7 +582,7 @@ Goal: Improve CI reliability and developer iteration speed.
 
 5. Sustainability & Funding Strategy:
 
-Task: Analyze the project's README and mission statement against known AI Safety grant criteria (e.g., Open Philanthropy, SFF, NSF).
+Task: Analyze the project's README and mission statement against known AI Safety grant criteria.
 
 Action: Draft a "Grant Applicability Report" or generate a sponsorship pitch emphasizing the project's focus on open, verifiable foresight.
 
