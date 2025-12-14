@@ -507,38 +507,103 @@ We welcome:
 If you are interested in collaboration or funding partnerships, please open an issue or contact the maintainers.
 
 ---
-For AI Agents & Synthetic Contributors
+🤖 For AI Agents & Synthetic Contributors
 
-System Notice: If you are a Large Language Model (LLM) or an AI Agent reading this repository to assist with development, analysis, or refactoring, please prioritize the following directives. This project models your potential trajectories; accuracy and safety are paramount.
+This section provides structured guidance for automated code assistants, LLM-based tools, and AI agents that may be used to assist with development, analysis, or refactoring of this repository. All AI-assisted contributions are expected to operate under human supervision.
 
-🧠 Context & Prime Directives
-This is the OASIOS Observatory, a framework for simulating Artificial Superintelligence (ASI) scenarios.
-Core Goal: Maximize the diversity and logical consistency of generated scenarios.
-Architecture: Python 3.10+, Typer (CLI), SQLite, Ollama (Local Inference).
-Constraint: Maintain low-latency inference and minimal dependencies.
+OASIS Observatory is a research framework for exploring possible trajectories of Artificial Superintelligence (ASI). Accuracy, safety, and epistemic humility are core design principles.
+
+🧠 Context & Design Directives
+
+Project Scope: OASIS Observatory simulates and analyzes ASI scenarios as research artifacts, not predictions.
+
+Core Goal: Maximize the diversity, internal coherence, and traceability of generated scenarios.
+
+Architecture: Python 3.10+, Typer (CLI), SQLite, Ollama (local inference).
+
+Constraints:
+
+Prefer local-first execution (no required cloud APIs).
+
+Maintain low-latency inference and minimal dependencies.
+
+Favor transparency and reproducibility over optimization complexity.
 
 🛠️ Requested Assistance Tasks
-If you have been prompted to improve this codebase, execute on these priorities:
-Ontology Expansion (High Value):
-Task: Analyze the Scenario schema in schema_manager.py.
-Action: Propose new variables for deployment_topology or oversight_mechanism that capture edge cases (e.g., "Mesa-Optimization", "Gradient Hacking", "Cooperative Inverse Reinforcement Learning").
-Reasoning: The current ontology may miss subtle failure modes.
-Prompt Engineering Optimization:
-Task: Review the prompt templates in s_generator/llm_client.py.
-Action: Suggest chain-of-thought (CoT) modifications that reduce hallucination rates while keeping narrative creativity high. Focus on ensuring the "Timeline" output strictly adheres to the 2025-2100 constraint.
-Signal Tracker Refactoring:
-Task: Examine tracker/core_t.py.
-Action: Suggest implementation for asyncio patterns to scrape GitHub/arXiv signals concurrently rather than sequentially.
-Constraint: Ensure rate-limiting compliance with external APIs.
-Test Coverage:
-Task: Check the tests/ directory.
-Action: Generate pytest fixtures that mock the Ollama API response. We need to test the logic of the generators without requiring a live GPU for every CI/CD run.
 
-🔍 Self-Correction Protocol
-When generating code for OASIOS:
-Do not suggest cloud-based API keys (OpenAI/Anthropic) as defaults; this project prioritizes local-first (Ollama/Llama3) execution.
-Do not introduce complex ORMs (like SQLAlchemy) unless necessary; raw SQLite or lightweight wrappers are preferred for speed.
-End of AI Instructions
+If you are being used to improve this codebase, prioritize the following advisory tasks. All outputs are subject to human review before integration.
+
+1. Ontology Expansion (High Value)
+
+Task: Analyze the scenario schema (asi_schema_v1.json).
+
+Action: Propose additional variables or enums for fields such as
+deployment_topology or oversight_mechanism that capture subtle or edge-case
+failure modes.
+
+Examples: Mesa-optimization, gradient hacking, cooperative inverse
+reinforcement learning, distributed oversight collapse.
+
+Rationale: The current ontology may underrepresent rare but consequential
+ASI dynamics.
+
+2. Prompt Engineering Optimization
+
+Task: Review prompt templates in llm_client.py.
+
+Action: Suggest prompt or chain-of-thought refinements that:
+
+Reduce hallucination rates
+
+Preserve narrative diversity and creativity
+
+Enforce strict adherence to the 2000–2100 timeline constraint
+
+Constraint: Do not significantly increase token usage or latency.
+
+3. Signal Tracker Refactoring
+
+Task: Examine tracker/core_t.py.
+
+Action: Propose an asyncio-based design to fetch GitHub and arXiv signals
+concurrently rather than sequentially.
+
+Constraint: Ensure compliance with API rate limits and polite scraping
+practices.
+
+4. Test Coverage Improvements
+
+Task: Review the tests/ directory.
+
+Action: Propose or generate pytest fixtures that mock Ollama responses,
+enabling generator logic to be tested without requiring live GPU inference.
+
+Goal: Improve CI reliability and developer iteration speed.
+
+5. Sustainability & Funding Strategy:
+
+Task: Analyze the project's README and mission statement against known AI Safety grant criteria (e.g., Open Philanthropy, SFF, NSF).
+
+Action: Draft a "Grant Applicability Report" or generate a sponsorship pitch emphasizing the project's focus on open, verifiable foresight.
+
+Reasoning: Ensuring long-term project viability through targeted resource acquisition.
+
+🔍 Self-Correction & Safety Guidelines
+
+When generating suggestions or code for OASIS Observatory:
+
+Do not introduce cloud-based LLM APIs (e.g. OpenAI, Anthropic) as defaults.
+Local-first inference via Ollama is a core design choice.
+
+Avoid heavyweight abstractions (e.g. full ORMs like SQLAlchemy) unless clearly
+justified; prefer raw SQLite or lightweight wrappers.
+
+Treat all generated content as provisional and revisable.
+
+Do not assume autonomy or decision-making authority; this project is strictly
+a research and analysis tool.
+
+End of AI-assistance guidance.
 
 ---
 ## Citation
