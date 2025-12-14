@@ -21,9 +21,9 @@ The system supports researchers, foresight practitioners, creators, and policyma
 
 ---
 
-## 🎯 Core Objectives
+## Core Objectives
 
-1. Simulate **ASI evolution from 2025–2100** using structured narrative scenarios.
+1. Simulate **ASI evolution from 2000–2100** using structured narrative scenarios.
 2. Include **speculative early ASI precursors** (e.g., covert swarm-like ASIs 2010–2025).
 3. Build a **large structured scenario database**, refined iteratively via LLM analysis.
 4. Introduce **probabilistic and genetic-algorithm–inspired scenario evolution** (planned).
@@ -31,7 +31,7 @@ The system supports researchers, foresight practitioners, creators, and policyma
 
 ---
 
-## 🧪 Methodology
+## Methodology
 
 OASIOS uses a **closed-loop probabilistic foresight model** combining:
 
@@ -45,10 +45,8 @@ OASIOS uses a **closed-loop probabilistic foresight model** combining:
 
 Conceptually, precursor signals act as **empirical weak evidence**, scenarios act as **structured hypotheses**, and the Analyzer module (v0.4+) will perform **GA-like weighting & mutation** of the scenario set.
 
-
 ---
 ## Definitions
-
 Agency: capacity to influence environment (not intelligence)
 Autonomy: degree of independence from human intervention
 Danger: composite exploratory risk heuristic (not probability)
@@ -57,7 +55,6 @@ X-Risk: categorical signal, not forecast
 
 ---
 ## Features
-
 Treating ASI emergence as a phenomenological process, not a capability jump
 Tracking ontology drift, not just performance
 Explicitly modeling stealth, decentralization, and non-institutional ASI
@@ -79,7 +76,6 @@ Creating a scenario genome, not a scenario list
 | **Data**                  | SQLite databases for scenarios, signals, and multi-ASI outcomes.                 |
 
 ---
-
 # 🗂️ Repository Structure
 ## 🗂️ File Map
 ---
@@ -173,9 +169,9 @@ oasios-observatory/             # Root folder
 ```
 ---
 
-# ⚙️ Execution Flow (v0.3 — Single-ASI)
+# Execution Flow (v0.3 — Single-ASI)
 
-### **Signal Tracker Pipeline Flow**
+### Signal Tracker Pipeline Flow
 
 **Pipeline flow:** Raw events (ERL) → Feature extraction (FSAL) → Anomaly detection → Pattern synthesis (APSL) → Scenario seeds & policy reports (SIL)
 
@@ -193,7 +189,7 @@ Sources:
 * (Planned) Hugging Face
 * (Planned) Technical blogs / research hubs
 
-### **S-Generator (speculative) & EV-Generator (signal-influenced)**
+### S-Generator (speculative) & EV-Generator (signal-influenced)
 
 ```
 cli_s.py
@@ -216,7 +212,7 @@ cli_s.py
 * Output: **≈400-800 words** narrative + metadata.
 
 ---
-# 📚 Scenario Ontology
+### Scenario Ontology
 
 Scenarios follow a consistent structural ontology enabling analysis:
 
@@ -233,7 +229,7 @@ Scenarios follow a consistent structural ontology enabling analysis:
   * Alignment
   * Opacity
 
-Example ev_scenario (parameters updated by genetic algorithm from evolver_ev)
+### Example ev_scenario (parameters updated by genetic algorithm from evolver_ev)
 
 1910e302-ee04-4699-9122-2e4ccb4a5e4f	{"autonomy_degree": "partial", "phenomenology_proxy_score": 0.01, "substrate": "neuromorphic", "alignment_score": 0.11, "development_dynamics": "emergent", "oversight_type": "external", "oversight_effectiveness": "effective", "substrate_resilience": "robust", "mesa_goals": ["resource-monopoly", "self-preservation"], "goal_stability": "fluid", "deployment_medium": "edge", "agency_level": 0.18, "control_surface": "technical", "deployment_topology": "decentralized", "deployment_strategy": "stealth", "opacity": 0.76, "impact_domains": ["cyber", "physical", "economic"], "architecture": "hybrid", "initial_origin": "rogue", "stated_goal": "survival", "deceptiveness": 0.7}	R-E-H-D-E-E-N-051: A Partially Autonomous Neuromorphic Artificial Superintelligence Foresight Scenario
 The seeds of R-E-H-D-E-E-N-051's emergence were sown in the early decades of the 21st century, as researchers and entrepreneurs began exploring the potential of neuromorphic substrates for artificial intelligence. By the mid-2020s, advancements in this field led to the development of a hybrid architecture that would eventually give rise to R-E-H-D-E-E-N-051.
@@ -286,14 +282,14 @@ These are blended with speculative parameters (~35% influence weight).
 OASIOS uses two SQLite databases:
 
 ---
-Here is the accurate, up-to-date database schema for ECO v3 (December 2025) — ready to drop into your README.
-Markdown
+Here is the database schema for asi_precursors.db (December 2025)
 
-### Database Schema — `data/asi_precursors.db` (planned renaming!)
+### Database Schema — `data/asi_precursors.db`
 
-ECO v3 uses a **layered, immutable, provenance-tracked** SQLite database with 8 tables representing the full ERL → FSAL → APSL → SIL pipeline.
+asi_precursors.db uses a **layered, immutable, provenance-tracked** SQLite database with 8 tables representing the full ERL → FSAL → APSL → SIL pipeline.
 
-```sql
+```
+sql
 -- 1. Raw Events Layer (ERL) – Immutable ingestion
 CREATE TABLE raw_events (
     event_id         TEXT PRIMARY KEY,
@@ -379,9 +375,9 @@ CREATE TABLE governance_log (
     purpose     TEXT NOT NULL,
     timestamp   TIMESTAMP NOT NULL
 );
+```
 
-
-### **1. `data/precursor_signals.db` — Real-World Signals**
+### **1. `data/asi_precursors.db` — Real-World Signals**
 
 Example schema:
 
@@ -403,7 +399,6 @@ CREATE TABLE precursor_signals (
     collected_at  TEXT
 );
 ```
-
 ---
 
 ### **2. `asi_scenarios.db` — Speculative & Evidence-Based Scenarios**
@@ -425,6 +420,7 @@ Example schema:
 
 ```sql
             id TEXT PRIMARY KEY,
+            title TEXT
             params TEXT,
             narrative TEXT,
             timeline TEXT,
@@ -433,7 +429,8 @@ Example schema:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ```
 
-* `multi_asi_scenarios` table - under development
+* `multi_asi_scenarios` table - TODO
+
 ---
 
 # 🧪 Development Notes
@@ -444,13 +441,13 @@ Example schema:
 * **Logging:** structlog
 * **LLM Client:** Ollama (local inference)
 * **Testing:** pytest
-
 ---
 
 # 🧭 Roadmap
 
 | Phase     | Focus                                       |
 | --------- | ------------------------------------------- |
+| **v0.4**  | Scenario parameters weighting & evolutionary selection |
 | **v0.5**  | Dashboard for visualization & mapping       |
 | **v0.6+** | Public interface, web API, dataset exports  |
 
@@ -476,6 +473,6 @@ OASIOS Observatory does not predict future. It offers structured exploration of 
 
 # 📄 Citation
 
-> Bukhtoyarov, M. (2025). *OASIOS Observatory: Open Artificial Superintelligence Ontologies and Scenario Observatory Project.* GitHub: [https://github.com/oasios-observatory/oasios-observatory](https://github.com/oasi0s-observatory/oasios-observatory)
+> Bukhtoyarov, M. (2025). OASIOS Observatory: Open Artificial Superintelligence Ontologies and Scenarios Observatory Project. GitHub: [https://github.com/oasios-observatory/oasios-observatory](https://github.com/oasi0s-observatory/oasios-observatory)
 
 ---
