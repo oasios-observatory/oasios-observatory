@@ -25,3 +25,4 @@ data/asi_precursors.db
 data/asi_scenarios.db
 /data/
 /report_generators/reports/
+/report_generators/charts/
