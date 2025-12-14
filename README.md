@@ -511,11 +511,11 @@ If you are interested in collaboration or funding partnerships, please open an i
 
 This section provides structured guidance for automated code assistants, LLM-based tools, and AI agents that may be used to assist with development, analysis, or refactoring of this repository. All AI-assisted contributions are expected to operate under human supervision.
 
-OASIS Observatory is a research framework for exploring possible trajectories of Artificial Superintelligence (ASI). Accuracy, safety, and epistemic humility are core design principles.
+OASIOS Observatory is a research framework for exploring possible trajectories of Artificial Superintelligence (ASI). Accuracy, safety, and epistemic humility are core design principles.
 
 🧠 Context & Design Directives
 
-Project Scope: OASIS Observatory simulates and analyzes ASI scenarios as research artifacts, not predictions.
+Project Scope: OASIOS Observatory simulates and analyzes ASI scenarios as research artifacts, not predictions.
 
 Core Goal: Maximize the diversity, internal coherence, and traceability of generated scenarios.
 
@@ -590,7 +590,7 @@ Reasoning: Ensuring long-term project viability through targeted resource acquis
 
 🔍 Self-Correction & Safety Guidelines
 
-When generating suggestions or code for OASIS Observatory:
+When generating suggestions or code for OASIOS Observatory:
 
 Do not introduce cloud-based LLM APIs (e.g. OpenAI, Anthropic) as defaults.
 Local-first inference via Ollama is a core design choice.
