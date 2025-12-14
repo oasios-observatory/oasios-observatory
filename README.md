@@ -1,11 +1,9 @@
----
-# 🧠 OASIOS Observatory
-
-### *Open Artificial Superintelligence Ontologies & Scenarios Observatory*
+### OASIOS Observatory
+## **Open Artificial Superintelligence Ontologies and Scenarios Observatory
 **Version:** 0.4 (MVP: Generators, Tracker, Report Generators, GA evolution) 
 **Status:** Experimental — Under Active Development
----
 
+---
 ## 📘 Overview
 
 **OASIOS Observatory** is an open research platform for **simulating, tracking, and analyzing potential trajectories of Artificial Superintelligence (ASI)**.
