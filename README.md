@@ -4,7 +4,7 @@
 **Status:** Experimental — Under Active Development
 
 ---
-## 📘 Overview
+## Overview
 
 **OASIOS Observatory** is an open research platform for **simulating, tracking, and analyzing potential trajectories of Artificial Superintelligence (ASI)**.
 
@@ -62,7 +62,7 @@ Creating a scenario genome, not a scenario list
 
 ---
 
-# 🧩 Module Overview
+# Module Overview
 
 | Module                    | Description                                                                      |
 | ------------------------- | -------------------------------------------------------------------------------- |
@@ -76,7 +76,7 @@ Creating a scenario genome, not a scenario list
 | **Data**                  | SQLite databases for scenarios, signals, and multi-ASI outcomes.                 |
 
 ---
-# 🗂️ Repository Structure
+# Repository Structure
 ## 🗂️ File Map
 ---
 ```
@@ -433,7 +433,7 @@ Example schema:
 
 ---
 
-# 🧪 Development Notes
+# Development Notes
 
 * **Language:** Python 3.10+
 * **CLI:** Typer
@@ -443,7 +443,7 @@ Example schema:
 * **Testing:** pytest
 ---
 
-# 🧭 Roadmap
+# Roadmap
 
 | Phase     | Focus                                       |
 | --------- | ------------------------------------------- |
@@ -452,7 +452,7 @@ Example schema:
 | **v0.6+** | Public interface, web API, dataset exports  |
 
 ---
-## 📄 License
+## License
 
 Released under the **MIT License**.
 
@@ -471,7 +471,7 @@ OASIOS Observatory does not predict future. It offers structured exploration of 
 
 ---
 
-# 📄 Citation
+# Citation
 
 > Bukhtoyarov, M. (2025). OASIOS Observatory: Open Artificial Superintelligence Ontologies and Scenarios Observatory Project. GitHub: [https://github.com/oasios-observatory/oasios-observatory](https://github.com/oasi0s-observatory/oasios-observatory)
 
