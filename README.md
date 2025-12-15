@@ -565,11 +565,9 @@ Constraint: Do not significantly increase token usage or latency.
 
 Task: Examine tracker/core_t.py.
 
-Action: Propose an asyncio-based design to fetch GitHub and arXiv signals
-concurrently rather than sequentially.
+Action: Propose an asyncio-based design to fetch signals concurrently rather than sequentially.
 
-Constraint: Ensure compliance with API rate limits and polite scraping
-practices.
+Constraint: Ensure compliance with API rate limits and polite scraping practices.
 
 4. Test Coverage Improvements
 
