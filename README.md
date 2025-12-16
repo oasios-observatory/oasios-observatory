@@ -1,5 +1,6 @@
 # OASIOS Observatory
 ## Open Artificial Superintelligence Ontologies and Scenarios Observatory
+### *Entia non multiplicamus praeter necessitatem. Ad potentiam eadem attollimus.*
 **Version:** 0.4 (MVP: Generators, Tracker, Report Generators, GA evolution) 
 **Status:** Experimental — Under Active Development
 
