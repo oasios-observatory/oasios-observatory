@@ -11,7 +11,7 @@
 It integrates:
 * **Speculative scenario generation**
 * **Evidence-driven scenario generation** using real-world AI precursor signals
-* **Signal tracking** from GitHub, ArXiv, and other sources
+* **Signal tracking** from web sources
 * **Consistency and schema validation**
 * **Transparent data provenance**
 * **Evolutionary scenario parameter evolver**
