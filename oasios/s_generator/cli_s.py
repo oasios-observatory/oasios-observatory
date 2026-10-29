@@ -1,43 +1,142 @@
-# oasios/s_generator/cli_s.py
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-CLI entrypoint for precursor-informed scenario generation
-"""
+# oasios/s_generator/cli_s.py
+
+"""CLI entrypoint for speculative ASI scenario generation."""
+
+from typing import Annotated
 
 import typer
-from oasios.s_generator.core_s import generate_scenario
-from oasios.logger import log
 
-app = typer.Typer(help="Generate speculative ASI scenarios using core_s pipeline.")
+from oasios.logger import log
+from oasios.s_generator.core_s import (
+    ScenarioGenerationError,
+    generate_scenario,
+)
+
+app = typer.Typer(
+    help="Generate speculative ASI scenarios using the core_s pipeline."
+)
 
 
 @app.command()
-def generate(n: int = typer.Option(
-    default=None,
-    help="Number of scenarios to generate. If not provided, you will be prompted."
-)):
-    """Generate N ASI scenarios."""
+def generate(
+    n: Annotated[
+        int | None,
+        typer.Option(
+            "--n",
+            "-n",
+            min=1,
+            help="Number of scenarios to generate. Prompts if omitted.",
+        ),
+    ] = None,
+) -> None:
+    """Generate one or more ASI scenarios."""
 
-    # If not provided via CLI, prompt the user interactively
     if n is None:
         try:
-            n = int(typer.prompt("Enter number of scenarios to generate"))
-        except ValueError:
-            typer.echo("Invalid input. Defaulting to 1.")
-            n = 1
+            n = typer.prompt(
+                "Enter number of scenarios to generate",
+                default=1,
+                type=int,
+            )
+        except (typer.Abort, KeyboardInterrupt):
+            typer.echo("\nGeneration cancelled.", err=True)
+            raise typer.Exit(code=130)
 
-    log.info("starting_generation", total=n)
-    typer.echo(f"\n🧠 Generating {n} scenario{'s' if n != 1 else ''}...\n")
+        if n < 1:
+            typer.echo(
+                "Error: The number of scenarios must be at least 1.",
+                err=True,
+            )
+            raise typer.Exit(code=2)
 
-    for i in range(1, n + 1):
-        log.info("generating", i=i)
-        scenario = generate_scenario()
-        if scenario:
-            typer.echo(f"✅ Generated: {scenario['title']}")
-        else:
-            typer.echo(f"❌ Scenario {i} generation failed.")
-    typer.echo("\n✨ Done.\n")
+    succeeded = 0
+    rejected = 0
+    failed = 0
+
+    log.info("generation.batch.started", total=n)
+
+    typer.echo(
+        f"\n🧠 Generating {n} scenario{'s' if n != 1 else ''}...\n"
+    )
+
+    for index in range(1, n + 1):
+        typer.echo(f"Generating scenario {index}/{n}...")
+
+        try:
+            scenario = generate_scenario()
+
+        except KeyboardInterrupt:
+            log.warning(
+                "generation.batch.interrupted",
+                index=index,
+                succeeded=succeeded,
+                rejected=rejected,
+                failed=failed,
+            )
+            typer.echo("\nGeneration interrupted.", err=True)
+            raise typer.Exit(code=130)
+
+        except ScenarioGenerationError as exc:
+            failed += 1
+
+            log.error(
+                "generation.scenario.failed",
+                index=index,
+                stage=exc.stage,
+                error=str(exc),
+            )
+
+            typer.echo(
+                f"❌ Scenario {index} failed during {exc.stage}.",
+                err=True,
+            )
+            continue
+
+        except Exception as exc:
+            failed += 1
+
+            log.error(
+                "generation.scenario.unexpected_error",
+                index=index,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+
+            typer.echo(
+                f"❌ Scenario {index} failed unexpectedly.",
+                err=True,
+            )
+            continue
+
+        if scenario is None:
+            rejected += 1
+            typer.echo(
+                f"⚠️ Scenario {index} was rejected by the generation pipeline."
+            )
+            continue
+
+        succeeded += 1
+
+        typer.echo(f"✅ Generated: {scenario['title']}")
+
+    typer.echo("\n✨ Generation finished.")
+    typer.echo(f"   Successful: {succeeded}")
+    typer.echo(f"   Rejected:   {rejected}")
+    typer.echo(f"   Failed:     {failed}")
+    typer.echo(f"   Total:      {n}")
+
+    log.info(
+        "generation.batch.completed",
+        total=n,
+        succeeded=succeeded,
+        rejected=rejected,
+        failed=failed,
+    )
+
+    if failed or rejected:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

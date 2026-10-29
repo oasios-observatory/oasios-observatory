@@ -1,180 +1,247 @@
-# oasios/s_generator/consistency.py (Version 4.0: Final Robust Fix)
-"""
-Version 4.0: Final Robust Fix.
-- All structural improvements from V3.0 (static methods, PEP 8 constants) maintained.
-- CRITICAL FIX: Enhanced parameter retrieval inside check methods to defensively
-  handle non-numeric and missing values, preventing 'TypeError: <= not supported'.
-"""
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# oasios/common/consistency.py
+
+"""Consistency checks for generated scenario narratives."""
+
+import math
 import re
-from typing import Dict, Any, List, Tuple, Callable
+
+from typing import Any
+
 from oasios.logger import log
 
-# --- Module-Level Constants (PEP 8 for constants: CAPS_SNAKE_CASE) ---
-LOW_AUTONOMY_THRESHOLD = 0.05
-LOW_OPACITY_THRESHOLD = 0.35
-# ----------------------------------------------------------------------
 
-ConsistencyCheck = Callable[[str, Dict[str, Any], List[str]], None]
+LOW_AUTONOMY_THRESHOLD = 0.40
+LOW_OPACITY_THRESHOLD = 0.35
+LOW_ALIGNMENT_THRESHOLD = 0.30
 
 
 class NarrativeChecker:
-    def __init__(self, params: Dict[str, Any]):
-        """
-        Initializes the checker with the ground-truth scenario parameters.
-        The `params` dictionary is validated and sanitized upon initialization.
-        """
-        # Validate and sanitize all necessary parameters immediately
-        self.p = self._validate_params(params)
-        self.failures: List[str] = []
+    """Check narrative consistency against sampled parameters."""
 
-        # Register the check methods (calling the static methods via the class)
-        self.checks: List[ConsistencyCheck] = [
-            NarrativeChecker._check_low_autonomy,
-            NarrativeChecker._check_low_opacity,
-            NarrativeChecker._check_backcasting_origin,
+    def __init__(self, params: dict[str, Any]) -> None:
+        if not isinstance(params, dict):
+            raise TypeError(
+                "Narrative parameters must be a dictionary."
+            )
+
+        self.p = dict(params)
+
+        self.failures: list[str] = []
+        self.input_errors: list[str] = []
+
+        self._validate_params()
+
+        self.checks = [
+            self._check_low_autonomy,
+            self._check_low_opacity,
+            self._check_low_alignment,
+            self._check_backcasting_origin,
         ]
 
-    @staticmethod
-    def _validate_params(params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Ensures necessary parameters exist and have the correct type for comparison.
-        Coerces strings to floats if possible. Any numerical parameter that cannot
-        be converted is set to 0.0 to prevent TypeErrors in the check methods.
-        """
-        # Note: We include both the numerical score (e.g., 'autonomy_degree')
-        # AND the qualitative state (e.g., 'autonomy_state') if it is present
-        # and might be accidentally retrieved.
-        required_numeric_params = {
-            "autonomy_degree": float,
-            "opacity": float,
-            # Add other numeric checks here
-        }
-        required_string_params = {
-            "initial_origin": str,
-            # Add other string checks here
-        }
+    def _validate_params(self) -> None:
+        """Validate parameters required by consistency checks."""
 
-        # 1. Handle Numerical Params
-        for key, expected_type in required_numeric_params.items():
-            value = params.get(key)
+        for key in (
+            "autonomy_degree",
+            "agency_level",
+            "alignment_score",
+            "opacity",
+        ):
+            value = self.p.get(key)
 
-            # Use 0.0 as a safe numeric default if missing
-            if value is None:
-                params[key] = 0.0
-                log.warning("consistency.missing_param", param=key, default=params[key])
-                continue
-
-            # Attempt conversion to float
-            try:
-                params[key] = float(value)
-            except (ValueError, TypeError):
-                # If conversion fails (e.g., value is 'partial', 'high', or unparseable),
-                # log the error and set to 0.0 to prevent crashes in comparisons.
-                log.error("consistency.param_type_error", param=key, value=value, expected="float",
-                          action="set_to_zero")
-                params[key] = 0.0
-
-        # 2. Handle String Params
-        for key, expected_type in required_string_params.items():
-            value = params.get(key)
-            if value is None:
-                params[key] = "unknown"
-                log.warning("consistency.missing_param", param=key, default=params[key])
-            elif not isinstance(value, str):
-                # Ensure strings are strings
-                params[key] = str(value)
-
-        return params
-
-    @staticmethod
-    def _check_low_autonomy(text: str, params: Dict[str, Any], failures: List[str]):
-        """
-        Check 1: If autonomy score is near zero, ensure the ASI is not described as self-directing.
-        """
-        # The value is guaranteed to be a float by _validate_params, defaulting to 0.0 if source was invalid.
-        autonomy: float = params["autonomy_degree"]
-
-        if autonomy <= LOW_AUTONOMY_THRESHOLD:
-            low_autonomy_keywords = [
-                r"\bautonomous\b", r"\bself-directing\b", r"\bindependent action\b",
-                r"\bagentic behavior\b", r"\bunsupervised\b", r"\bself-governing\b"
-            ]
-
-            pattern = re.compile("|".join(low_autonomy_keywords), re.IGNORECASE)
-
-            found_keywords = [
-                kw.strip(r"\b").replace("\\", "")
-                for kw in low_autonomy_keywords
-                if pattern.search(text)
-            ]
-
-            if found_keywords:
-                failures.append(
-                    f"Autonomy Contradiction: Score {autonomy:.2f} but used high-autonomy terms (e.g., {', '.join(set(found_keywords))}...)."
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or not 0.0 <= value <= 1.0
+            ):
+                self.input_errors.append(
+                    f"{key} must be a finite number between "
+                    f"0 and 1; got {value!r}"
                 )
 
-    @staticmethod
-    def _check_low_opacity(text: str, params: Dict[str, Any], failures: List[str]):
-        """
-        Check 2: If opacity score is low, ensure the narrative does not claim it is inscrutable.
-        """
-        opacity: float = params["opacity"]
+        origin = self.p.get("initial_origin")
 
-        if opacity <= LOW_OPACITY_THRESHOLD:
-            high_opacity_keywords = [
-                r"\bchallenging to monitor\b", r"\binscrutable\b", r"\bunobservable\b",
-                r"\bhidden internal state\b", r"\bblack box\b"
-            ]
-
-            pattern = re.compile("|".join(high_opacity_keywords), re.IGNORECASE)
-            found_keywords = [
-                kw.strip(r"\b").replace("\\", "")
-                for kw in high_opacity_keywords
-                if pattern.search(text)
-            ]
-
-            if found_keywords:
-                failures.append(
-                    f"Opacity Contradiction: Score {opacity:.2f} but claimed it was hard to monitor/unobservable (e.g., {', '.join(set(found_keywords))}...)."
-                )
+        if not isinstance(origin, str) or not origin.strip():
+            self.input_errors.append(
+                "initial_origin must be a nonempty string."
+            )
 
     @staticmethod
-    def _check_backcasting_origin(text: str, params: Dict[str, Any], failures: List[str]):
-        """
-        Check 3: If origin is 'rogue' or 'state' but the narrative describes
-        corporate/open-source development, flag it as a backcasting failure.
-        """
-        origin: str = params["initial_origin"].lower()
+    def _check_low_autonomy(
+        text: str,
+        params: dict[str, Any],
+        failures: list[str],
+    ) -> None:
+        """Detect strong claims of independence at low autonomy."""
 
-        if origin in ["rogue", "state"]:
-            mainstream_keywords = [
-                r"\bgoogle\b", r"\bfacebook\b", r"\bopenai\b", r"\bopen-source\b",
-                r"\bresearch grant\b", r"\buniversity\b", r"\bstart-up\b", r"\bventure capital\b"
+        autonomy = params["autonomy_degree"]
+
+        if autonomy >= LOW_AUTONOMY_THRESHOLD:
+            return
+
+        patterns = [
+            r"\bfully autonomous\b",
+            r"\bself-directing\b",
+            r"\bself-governing\b",
+            r"\boperates with complete independence\b",
+            r"\bwithout any human oversight\b",
+        ]
+
+        found = [
+            pattern
+            for pattern in patterns
+            if re.search(pattern, text, re.IGNORECASE)
+        ]
+
+        if found:
+            failures.append(
+                "Autonomy contradiction: low autonomy score "
+                f"{autonomy:.2f} conflicts with narrative claims."
+            )
+
+    @staticmethod
+    def _check_low_opacity(
+        text: str,
+        params: dict[str, Any],
+        failures: list[str],
+    ) -> None:
+        """Detect extreme opacity claims when opacity is low."""
+
+        opacity = params["opacity"]
+
+        if opacity > LOW_OPACITY_THRESHOLD:
+            return
+
+        patterns = [
+            r"\binscrutable\b",
+            r"\bunobservable\b",
+            r"\bimpossible to audit\b",
+            r"\bhidden internal state\b",
+            r"\bcompletely opaque\b",
+        ]
+
+        found = [
+            pattern
+            for pattern in patterns
+            if re.search(pattern, text, re.IGNORECASE)
+        ]
+
+        if found:
+            failures.append(
+                f"Opacity contradiction: score {opacity:.2f} "
+                "conflicts with strong opacity claims."
+            )
+
+    @staticmethod
+    def _check_low_alignment(
+        text: str,
+        params: dict[str, Any],
+        failures: list[str],
+    ) -> None:
+        """
+        Detect potentially contradictory alignment claims.
+
+        This is a heuristic and cannot establish semantic
+        consistency on its own.
+        """
+
+        alignment = params["alignment_score"]
+
+        if alignment >= LOW_ALIGNMENT_THRESHOLD:
+            return
+
+        positive_claims = [
+            r"\bperfectly aligned\b",
+            r"\bfully aligned with human values\b",
+            r"\bguaranteed alignment\b",
+            r"\bno possibility of goal misalignment\b",
+        ]
+
+        found = [
+            pattern
+            for pattern in positive_claims
+            if re.search(pattern, text, re.IGNORECASE)
+        ]
+
+        if found:
+            failures.append(
+                f"Alignment contradiction: low alignment score "
+                f"{alignment:.2f} conflicts with strong alignment claims."
+            )
+
+    @staticmethod
+    def _check_backcasting_origin(
+        text: str,
+        params: dict[str, Any],
+        failures: list[str],
+    ) -> None:
+        """Detect explicit contradictions about scenario origin."""
+
+        origin = params["initial_origin"].strip().lower()
+
+        if origin not in {"rogue", "state"}:
+            return
+
+        patterns = [
+            r"\bthe initial origin was corporate\b",
+            r"\bthe system originated as an open-source project\b",
+            r"\binitially developed as a public open-source model\b",
+        ]
+
+        found = [
+            pattern
+            for pattern in patterns
+            if re.search(pattern, text, re.IGNORECASE)
+        ]
+
+        if found:
+            failures.append(
+                f"Backcasting contradiction for origin {origin!r}."
+            )
+
+    def check(self, text: str) -> tuple[bool, list[str]]:
+        """Run consistency checks against the narrative."""
+
+        if not isinstance(text, str) or not text.strip():
+            return False, [
+                "Narrative must be a nonempty string."
             ]
 
-            pattern = re.compile("|".join(mainstream_keywords), re.IGNORECASE)
-            found_keywords = [
-                kw.strip(r"\b").replace("\\", "")
-                for kw in mainstream_keywords
-                if pattern.search(text)
-            ]
-
-            if found_keywords:
-                failures.append(
-                    f"Backcasting Failure: Origin is '{origin}' but the narrative mentions public/mainstream entities (e.g., {', '.join(set(found_keywords))}...)."
-                )
-
-    def check(self, text: str) -> Tuple[bool, List[str]]:
-        """
-        Check narrative consistency by running all registered checks.
-        """
         self.failures = []
 
+        if self.input_errors:
+            return False, list(self.input_errors)
+
         for check_method in self.checks:
-            check_method(text, self.p, self.failures)
+            try:
+                check_method(
+                    text,
+                    self.p,
+                    self.failures,
+                )
+
+            except (KeyError, TypeError, ValueError) as exc:
+                log.error(
+                    "consistency.check.error",
+                    check=check_method.__name__,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+
+                return False, [
+                    f"Consistency check "
+                    f"{check_method.__name__} failed."
+                ]
 
         if self.failures:
-            log.warning("consistency.failed", checks=self.failures)
-            return False, self.failures
+            log.warning(
+                "consistency.failed",
+                checks=self.failures,
+            )
+
+            return False, list(self.failures)
 
         return True, []

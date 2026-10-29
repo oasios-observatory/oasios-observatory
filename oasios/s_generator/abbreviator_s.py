@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# oasios/common/abbreviator_s.py
+# oasios/s_generator/abbreviator_s.py
 """
 Created on Sat Nov  8 16:14:53 2025
 

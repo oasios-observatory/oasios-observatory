@@ -19,10 +19,12 @@ requests = "^2.32.0"
 feedparser = "^6.0.12"
 
 # ←←← ADD THESE THREE LINES ONLY ←←←
-pandas = { version = "^2.2", optional = true }
-matplotlib = { version = "^3.8", optional = true }
-reportlab = { version = "^4.0", optional = true }
+pandas = ">=2.3"
+matplotlib = "3.10.8"
+reportlab = "4.4.6"
 package-name = "^0.1"
+xmltodict = "^1.0.4"
+numpy = ">=2.0,<2.3"
 
 [tool.poetry.extras]
 report = ["pandas", "matplotlib", "reportlab"]

@@ -3,7 +3,6 @@
 
 import typer
 import requests
-from typing import Optional
 import structlog
 import json
 

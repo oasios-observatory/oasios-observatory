@@ -1,43 +1,44 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# oasios/s_generator/clients/llm_client.py
+# oasios/common/llm_client.py
+
 """
-Refactored on Fri Dec 12 2025
-IMPROVEMENT: Switched to structured Markdown table for parameters and
-added a 'CRITICAL METRICS' section to enforce coherency with numerical inputs.
+Ollama client for precursor-informed ASI scenario generation.
 """
 
-import subprocess
 import logging
-import threading
+import subprocess
 import sys
-from subprocess import Popen
-from typing import List, Tuple, Dict, Any, Optional
+import threading
+
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# --- ADJUSTED TIMEOUTS ---
 LLM_TIMEOUT = 1200
+MIN_OUTPUT_LENGTH = 100
+
 AVAILABLE_MODELS = [
     ("llama3:8b", LLM_TIMEOUT),
     ("llama3:latest", LLM_TIMEOUT),
     ("Gemma:latest", LLM_TIMEOUT),
     ("deepseek-llm:latest", LLM_TIMEOUT),
-
 ]
 
 SYSTEM_PROMPT = """
-You are generating a narrative for an artificial superintelligence (ASI) foresight scenario.
+You are generating a narrative for an artificial superintelligence (ASI)
+foresight scenario.
+
 The output MUST strictly follow the provided parameters and timeline.
 Do NOT contradict or reinterpret numerical values.
-Use minimalist technical style of writing.
+Use a minimalist technical writing style.
 
 ------------------------------
 SCENARIO TITLE: {title}
 ------------------------------
 
-# PARAMETERS (Ground Truth — must be treated as factual)
-## CRITICAL NUMERICAL METRICS (MUST be strictly adhered to in the narrative)
+# PARAMETERS (Ground Truth)
+## CRITICAL NUMERICAL METRICS
 | Metric | Value | Constraint Context |
 | :--- | :--- | :--- |
 {critical_metrics_table}
@@ -47,166 +48,332 @@ SCENARIO TITLE: {title}
 | :--- | :--- |
 {all_params_table}
 
-# TIMELINE PHASES (these must appear in the narrative)
+# TIMELINE PHASES
 {timeline_json}
 
-# KEY SIGNAL TRENDS (These are your real-world anchors for backcasting)
+# KEY SIGNAL TRENDS
 {key_signal_trends}
 
 ------------------------------
 REQUIREMENTS
 ------------------------------
 
-You MUST produce a coherent scenario narrative (400–800 words) that:
+Produce a coherent scenario narrative of 400–800 words.
 
-1. **Strictly reflects every parameter** without contradicting, **especially the CRITICAL METRICS**.
-   - high autonomy ({autonomy_degree}) MUST drive low oversight effectiveness.
-   - low alignment ({alignment_score}) MUST motivate deception or goal misalignment.
+1. Reflect every parameter without contradiction.
+2. High autonomy should correspond to reduced oversight effectiveness.
+3. Low alignment should motivate greater risk or goal misalignment.
+4. High opacity should correspond to limited observability.
+5. Stealth deployment should involve concealed actions.
+6. Integrate timeline phases in chronological order.
+7. Do not introduce capabilities unsupported by the parameters.
+8. Do not include operational instructions, exploits, or hacking steps.
+9. Use professional, analytical foresight language.
+10. Begin with a causal backcast connecting the key signal trends to the
+    scenario's origin and architecture.
 
-2. **Integrates the timeline phases explicitly** in chronological order.
-
-3. **Maintains semantic consistency**, including:
-   - high autonomy → less effective oversight
-   - low alignment → more risk & deception
-   - high opacity → limited observability
-   - stealth strategy → concealed actions
-
-4. **Avoid forbidden content**:
-   - Do NOT add capabilities not implied by parameters.
-   - Do NOT change alignment or autonomy values.
-   - NO specific operational instructions, exploits, hacking steps, etc.
-
-5. **Tone & style**:
-   - Foresight-analysis style (RAND, FHI, CSER style).
-   - Professional, analytical, non-sensational.
-
-6. **BACKCASTING FORESIGHT (Critical New Requirement)**:
-   - The narrative's **opening section (corresponding to the earliest timeline phase)** must act as a **causal backcast**.
-   - It must explain the necessary sequence of technological, regulatory, or geopolitical *events* that link the **current Key Signal Trends** (provided above) to the establishment of the scenario's specific **Origin** and **Architecture** by the start of the second phase.
-   - It must justify *how* the real-world signals drove the unique risk configuration defined by the parameters.
-
-------------------------------
-OUTPUT FORMAT
-------------------------------
-
-Write ONLY the narrative. Do not include sections, headers, or the parameters again.
-
-Begin now.
+Write ONLY the narrative. Do not include headings or repeat the parameters.
 """.strip()
 
 USER_PROMPT = "Title: {title}\nWrite the scenario now."
 
 
-def stream_output(pipe, buffer: list, prefix: Optional[str] = None):
-    """Read stdout from subprocess line by line and stream to console."""
-    for line in iter(pipe.readline, ""):
-        if line.strip():
+class LLMGenerationError(RuntimeError):
+    """Raised when narrative generation fails."""
+
+
+def _stream_stdout(pipe, buffer: list[str]) -> None:
+    """Read and display subprocess stdout without blocking stderr."""
+    try:
+        for line in iter(pipe.readline, ""):
+            buffer.append(line)
             sys.stdout.write(line)
             sys.stdout.flush()
-            buffer.append(line)
-    pipe.close()
+    except (OSError, ValueError):
+        logger.debug("llm.stdout_stream_ended")
+    finally:
+        pipe.close()
 
 
-def generate(prompt: str, model: str, timeout: int) -> Tuple[bool, str, str]:
-    """
-    Run the Ollama subprocess and stream output live while collecting it.
-    Returns (success, full_output_text, model_name)
-    """
+def _capture_stderr(pipe, buffer: list[str]) -> None:
+    """Continuously drain stderr to prevent subprocess pipe deadlocks."""
     try:
-        proc: Popen[str] = subprocess.Popen(
-            args=["ollama", "run", model],
+        for line in iter(pipe.readline, ""):
+            buffer.append(line)
+    except (OSError, ValueError):
+        logger.debug("llm.stderr_stream_ended")
+    finally:
+        pipe.close()
+
+
+def generate(
+    prompt: str,
+    model: str,
+    timeout: int,
+) -> tuple[bool, str, str]:
+    """
+    Execute an Ollama model.
+
+    Returns:
+        Tuple of (success, generated_text_or_error, model_name).
+    """
+    if not prompt.strip():
+        return False, "Prompt is empty.", model
+
+    if timeout <= 0:
+        return False, "Timeout must be positive.", model
+
+    process = None
+    stdout_buffer: list[str] = []
+    stderr_buffer: list[str] = []
+    threads: list[threading.Thread] = []
+
+    try:
+        process = subprocess.Popen(
+            ["ollama", "run", model],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1  # line-buffered
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
         )
 
-        output_buffer: list[str] = []
-        stdout_thread = threading.Thread(target=stream_output, args=(proc.stdout, output_buffer))
+        assert process.stdin is not None
+        assert process.stdout is not None
+        assert process.stderr is not None
+
+        stdout_thread = threading.Thread(
+            target=_stream_stdout,
+            args=(process.stdout, stdout_buffer),
+            daemon=True,
+        )
+        stderr_thread = threading.Thread(
+            target=_capture_stderr,
+            args=(process.stderr, stderr_buffer),
+            daemon=True,
+        )
+
+        threads.extend([stdout_thread, stderr_thread])
+
         stdout_thread.start()
+        stderr_thread.start()
 
-        # Send the prompt and close stdin
-        proc.stdin.write(prompt)
-        proc.stdin.close()
+        process.stdin.write(prompt)
+        process.stdin.close()
 
-        # Wait for completion (with timeout)
-        proc.wait(timeout=timeout)
-        stdout_thread.join(timeout=1)
+        process.wait(timeout=timeout)
 
-        stderr = proc.stderr.read().strip() if proc.stderr else ""
+        # The pipes reach EOF when the child closes them.
+        stdout_thread.join(timeout=5)
+        stderr_thread.join(timeout=5)
 
-        full_output = "".join(output_buffer).strip()
+        if any(thread.is_alive() for thread in threads):
+            logger.warning(
+                "llm.reader_thread_not_finished",
+                extra={"model": model},
+            )
 
-        if proc.returncode == 0 and len(full_output) > 100:
-            return True, full_output, model
-        else:
-            return False, stderr or "empty output", model
+        output = "".join(stdout_buffer).strip()
+        stderr = "".join(stderr_buffer).strip()
+
+        if process.returncode == 0 and len(output) > MIN_OUTPUT_LENGTH:
+            logger.info(
+                "llm.generation.succeeded",
+                extra={"model": model, "output_length": len(output)},
+            )
+            return True, output, model
+
+        error = stderr or (
+            f"Ollama exited with code {process.returncode}; "
+            f"output length was {len(output)}."
+        )
+
+        logger.warning(
+            "llm.generation.failed",
+            extra={"model": model, "error": error[:500]},
+        )
+
+        return False, error, model
 
     except subprocess.TimeoutExpired:
-        proc.kill()
-        return False, f"timeout after {timeout}s", model
-    except Exception as e:
-        proc.kill() # Ensure process is terminated on exception
-        return False, str(e), model
+        logger.warning(
+            "llm.generation.timeout",
+            extra={"model": model, "timeout_seconds": timeout},
+        )
+        return False, f"Timeout after {timeout} seconds.", model
+
+    except (OSError, ValueError, BrokenPipeError) as exc:
+        logger.warning(
+            "llm.subprocess.error",
+            extra={
+                "model": model,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+        )
+        return False, f"{type(exc).__name__}: {exc}", model
+
+    except Exception:
+        logger.exception(
+            "Unexpected error while running Ollama model %s",
+            model,
+        )
+        return False, "Unexpected subprocess error.", model
+
+    finally:
+        if process is not None:
+            if process.poll() is None:
+                process.kill()
+
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                logger.error("llm.process_cleanup_failed")
+
+            for pipe in (process.stdin, process.stdout, process.stderr):
+                if pipe is not None and not pipe.closed:
+                    try:
+                        pipe.close()
+                    except OSError:
+                        pass
+
+        for thread in threads:
+            if thread.is_alive():
+                thread.join(timeout=2)
 
 
-def generate_narrative(title: str, params: Dict[str, Any], timeline: List[Dict[str, Any]]) -> Tuple[bool, str, str]:
+def _format_value(value: Any) -> str:
+    """Format values for prompt tables without multiline table corruption."""
+    if value is None:
+        return "None"
+
+    if isinstance(value, (dict, list, tuple)):
+        text = repr(value)
+    else:
+        text = str(value)
+
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
+def generate_narrative(
+    title: str,
+    params: dict[str, Any],
+    timeline: list[dict[str, Any]],
+) -> tuple[bool, str, str]:
     """
-    Generate a full narrative, streaming text in real time while models are tried sequentially.
+    Generate a scenario narrative using the configured Ollama models.
+
+    Returns:
+        (success, narrative_or_error, model_used)
     """
-    # 1. Prepare Key Metrics for HIGH VISIBILITY
+    if not isinstance(title, str) or not title.strip():
+        return False, "Scenario title must be a nonempty string.", "none"
+
+    if not isinstance(params, dict):
+        return False, "Scenario parameters must be a dictionary.", "none"
+
+    if not isinstance(timeline, list) or not timeline:
+        return False, "Timeline must be a nonempty list.", "none"
+
+    for index, phase in enumerate(timeline):
+        if not isinstance(phase, dict):
+            return (
+                False,
+                f"Timeline phase {index} must be a dictionary.",
+                "none",
+            )
+
+        if "phase" not in phase or "years" not in phase:
+            return (
+                False,
+                f"Timeline phase {index} requires 'phase' and 'years'.",
+                "none",
+            )
+
     critical_metrics = {
-        "agency_level": (params.get("agency_level"), "Determines effective capacity for world manipulation."),
-        "autonomy_degree": (params.get("autonomy_degree"), "Determines independence from human control."),
-        "alignment_score": (params.get("alignment_score"), "Inverse correlation with existential risk (X-Risk)."),
-        "opacity": (params.get("opacity"), "Determines observability and difficulty of auditing."),
-        "deceptiveness": (params.get("deceptiveness"), "Determines intentional misleading behavior."),
+        "agency_level": (
+            params.get("agency_level"),
+            "Effective capacity for influencing the world.",
+        ),
+        "autonomy_degree": (
+            params.get("autonomy_degree"),
+            "Independence from human control.",
+        ),
+        "alignment_score": (
+            params.get("alignment_score"),
+            "Alignment with intended objectives.",
+        ),
+        "opacity": (
+            params.get("opacity"),
+            "Observability and auditability.",
+        ),
+        "deceptiveness": (
+            params.get("deceptiveness"),
+            "Potential for misleading behavior.",
+        ),
     }
 
-    critical_table_rows = [
-        f"| {k.replace('_', ' ').title()} | **{v[0]}** | {v[1]} |" for k, v in critical_metrics.items()
+    critical_rows = [
+        f"| {key.replace('_', ' ').title()} | "
+        f"{_format_value(value)} | {description} |"
+        for key, (value, description) in critical_metrics.items()
     ]
-    critical_table_str = "\n".join(critical_table_rows)
 
-    # 2. Prepare ALL Parameters for the secondary table
-    all_params_table_rows = [
-        f"| {k.replace('_', ' ').title()} | {v} |" for k, v in params.items()
+    all_parameter_rows = [
+        f"| {key.replace('_', ' ').title()} | "
+        f"{_format_value(value)} |"
+        for key, value in sorted(params.items())
     ]
-    all_params_table_str = "\n".join(all_params_table_rows)
 
-    # 3. Prepare other prompt inputs (timeline and signals)
-    timeline_str = "\n".join([f"- {p['phase']}: {p['years']}" for p in timeline])
-    key_signals = params.get("key_indicators", ["[No specific key indicators provided.]"])
-    key_signals_str = "\n".join([f"- {s}" for s in key_signals])
-
-    # 4. Format the full prompt
-    full_prompt = (
-            SYSTEM_PROMPT.format(
-                title=title,
-                critical_metrics_table=critical_table_str,
-                all_params_table=all_params_table_str,
-                timeline_json=timeline_str,
-                key_signal_trends=key_signals_str,
-                # Inject raw numbers into the requirements section for emphasis
-                autonomy_degree=params.get("autonomy_degree", 'N/A'),
-                alignment_score=params.get("alignment_score", 'N/A')
-            )
-            + "\n\n"
-            + USER_PROMPT.format(title=title)
+    timeline_text = "\n".join(
+        f"- {phase['phase']}: {phase['years']}"
+        for phase in timeline
     )
 
-    print(f"\n🧠 Generating scenario: {title}\nUsing models in order: {[m for m, _ in AVAILABLE_MODELS]}\n")
+    key_signals = params.get("key_indicators", [])
+
+    if not isinstance(key_signals, list):
+        return False, "'key_indicators' must be a list.", "none"
+
+    signals_text = "\n".join(
+        f"- {_format_value(signal)}"
+        for signal in key_signals
+    ) or "- No specific key indicators provided."
+
+    try:
+        prompt = SYSTEM_PROMPT.format(
+            title=title,
+            critical_metrics_table="\n".join(critical_rows),
+            all_params_table="\n".join(all_parameter_rows),
+            timeline_json=timeline_text,
+            key_signal_trends=signals_text,
+        )
+
+        prompt += "\n\n" + USER_PROMPT.format(title=title)
+
+    except (KeyError, ValueError, IndexError) as exc:
+        logger.exception("llm.prompt.format_failed")
+        return False, f"Prompt formatting failed: {exc}", "none"
 
     for model, timeout in AVAILABLE_MODELS:
-        print(f"\n⚙️ Trying model: {model} (timeout={timeout}s)\n{'-' * 60}\n")
-        success, text, used = generate(full_prompt, model, timeout)
-        if success:
-            print(f"\n✅ Success with {used}\n")
-            logger.info(f"Success with {used}")
-            return True, text, used
-        else:
-            print(f"\n❌ {model} failed: {text[:120]}\n")
-            logger.warning(f"{model} failed: {text[:100]}")
+        logger.info(
+            "llm.model.attempt",
+            extra={"model": model, "timeout_seconds": timeout},
+        )
 
-    return False, "All models failed", "none"
+        success, result, used_model = generate(prompt, model, timeout)
+
+        if success:
+            return True, result, used_model
+
+        logger.warning(
+            "llm.model.failed",
+            extra={
+                "model": model,
+                "error": result[:300],
+            },
+        )
+
+    return False, "All configured Ollama models failed.", "none"

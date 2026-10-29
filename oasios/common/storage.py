@@ -2,213 +2,318 @@
 # -*- coding: utf-8 -*-
 # oasios/common/storage.py
 
-import sqlite3
+"""SQLite persistence for generated ASI scenarios."""
+
 import json
+import sqlite3
 import uuid
+
 from contextlib import closing
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
+
 from oasios.config import settings
 from oasios.logger import log
 
 
-# ------------------------------------------------------------
-# DB Setup
-# ------------------------------------------------------------
+ALLOWED_TABLES = frozenset({"s_scenarios", "ev_scenarios"})
 
-def _ensure_db_path():
-    """Ensure database directory + file exist."""
-    # NOTE: Assuming settings.db_path holds the path to asi_scenarios.db
+
+class StorageError(RuntimeError):
+    """Raised when a scenario persistence operation fails."""
+
+
+def _ensure_db_path() -> Path:
+    """Create the database directory and file if necessary."""
     db_path = Path(settings.db_path)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    if not db_path.exists():
-        db_path.touch()
-        log.info("db.created", path=str(db_path))
+
+    try:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not db_path.exists():
+            db_path.touch()
+            log.info("db.created", path=str(db_path))
+
+    except OSError as exc:
+        raise StorageError(
+            f"Unable to prepare database path {db_path}: {exc}"
+        ) from exc
+
+    return db_path
 
 
-def get_conn():
-    """Return sqlite3 connection with row dicts enabled."""
+def _validate_table_name(table_name: str) -> str:
+    """Restrict table access to known application tables."""
+    if table_name not in ALLOWED_TABLES:
+        raise ValueError(f"Unsupported database table: {table_name!r}")
+
+    return table_name
+
+
+def get_conn() -> sqlite3.Connection:
+    """Create a SQLite connection with dictionary-like rows."""
+    db_path = _ensure_db_path()
+
+    try:
+        conn = sqlite3.connect(str(db_path), timeout=30)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    except sqlite3.Error as exc:
+        raise StorageError(
+            f"Unable to connect to database {db_path}: {exc}"
+        ) from exc
+
+
+def init_table(table_name: str) -> None:
+    """Create a scenario table if it does not already exist."""
+    table_name = _validate_table_name(table_name)
+
+    try:
+        with closing(get_conn()) as conn:
+            with conn:
+                conn.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {table_name} (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        params TEXT NOT NULL,
+                        narrative TEXT NOT NULL,
+                        timeline TEXT NOT NULL,
+                        model_used TEXT,
+                        signals TEXT NOT NULL DEFAULT '[]',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        plausibility_index REAL DEFAULT 0.0,
+                        generation_origin TEXT DEFAULT 'SPECULATIVE'
+                    )
+                    """
+                )
+
+    except sqlite3.Error as exc:
+        log.error(
+            "db.table_init.failed",
+            table=table_name,
+            error=str(exc),
+        )
+        raise StorageError(
+            f"Unable to initialize table {table_name!r}: {exc}"
+        ) from exc
+
+
+def init_db() -> None:
+    """Initialize all scenario tables."""
     _ensure_db_path()
-    conn = sqlite3.connect(settings.db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
 
+    init_table("s_scenarios")
+    init_table("ev_scenarios")
 
-def init_table(table_name: str):
-    """Create the standard scenario table schema, including GA fields."""
-    conn = get_conn()
-    cur = conn.cursor()
-
-    cur.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS {table_name} (
-            id TEXT PRIMARY KEY,
-            title TEXT,
-            params TEXT,
-            narrative TEXT,
-            timeline TEXT,
-            model_used TEXT,
-            signals TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            plausibility_index REAL DEFAULT 0.0,
-            generation_origin TEXT DEFAULT 'SPECULATIVE'
-        );
-        """
+    log.info(
+        "storage.initialized",
+        tables=["s_scenarios", "ev_scenarios"],
     )
 
-    conn.commit()
-    conn.close()
 
-
-def init_db():
-    """
-    Create both tables used by generators.
-    Always safe to call.
-    """
-    _ensure_db_path()
-
-    init_table("s_scenarios")  # s-generator storage
-    init_table("ev_scenarios")  # ev-generator storage
-
-    log.info("storage.initialized", tables=["s_scenarios", "ev_scenarios"])
-    print("[storage] Database initialized and tables ensured.")
-
-
-# --- EV Scenario Counter ---
 def get_next_ev_scenario_number() -> int:
-    """
-    Returns the next sequential number for an Evidence-Based (EV) scenario
-    by counting existing entries in the 'ev_scenarios' table.
-    """
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM ev_scenarios")
-    count = cursor.fetchone()[0]
-    conn.close()
-    return count + 1
+    """Return the next count-based EV scenario number."""
+    try:
+        with closing(get_conn()) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM ev_scenarios"
+            ).fetchone()
 
+            return int(row[0]) + 1
 
-# --------------------------------
-# V2.0: Core DB Operations (Required for Cleanup Script)
-# --------------------------------
+    except sqlite3.Error as exc:
+        raise StorageError(
+            f"Unable to count EV scenarios: {exc}"
+        ) from exc
+
 
 class Storage:
-    """
-    A lightweight wrapper for core database operations, providing
-    access to the low-level functions. Used by the checker/cleanup tools.
-    """
+    """Convenience wrapper for database operations."""
 
-    def __init__(self):
-        # We don't need a persistent connection object here, just the methods
-        pass
-
-    def initialize(self):
-        """Ensures the DB file and tables exist."""
+    def initialize(self) -> None:
         init_db()
 
-    def get_rows_by_condition(self, table_name: str, columns: Optional[List[str]] = None, condition: str = "1=1") -> \
-    List[Dict[str, Any]]:
+    def get_rows_by_condition(
+        self,
+        table_name: str,
+        columns: Optional[list[str]] = None,
+        condition: str = "1=1",
+    ) -> list[dict[str, Any]]:
         """
-        Fetches rows from a table, optionally restricting columns and using a WHERE clause.
+        Retrieve rows from a known table.
 
-        Args:
-            table_name: The name of the table to query.
-            columns: A list of columns to select. If None, selects all columns (*).
-            condition: The WHERE clause (default "1=1" means select all).
-
-        Returns:
-            A list of dictionaries representing the selected rows.
+        WARNING:
+            `columns` and `condition` are SQL fragments. They must only
+            contain trusted application-controlled input.
         """
-        column_list = ", ".join(columns) if columns else "*"
-        sql = f"SELECT {column_list} FROM {table_name} WHERE {condition};"
+        table_name = _validate_table_name(table_name)
 
-        with closing(get_conn()) as conn:
-            cur = conn.cursor()
-            cur.execute(sql)
-            # Fetch all results as a list of dictionaries. sqlite3.Row allows this via dict()
-            results = [dict(row) for row in cur.fetchall()]
-            return results
+        if columns:
+            if any(
+                not isinstance(column, str)
+                or not column.replace("_", "").isalnum()
+                for column in columns
+            ):
+                raise ValueError("Invalid column identifier.")
 
-    def delete_rows(self, table_name: str, condition: str = "0=1") -> int:
-        """
-        Deletes rows from a table based on a WHERE clause.
+            column_list = ", ".join(columns)
+        else:
+            column_list = "*"
 
-        Args:
-            table_name: The name of the table to delete from.
-            condition: The WHERE clause (e.g., "id IN ('id1', 'id2')"). Default "0=1" is a safe no-op.
+        sql = (
+            f"SELECT {column_list} FROM {table_name} "
+            f"WHERE {condition};"
+        )
 
-        Returns:
-            The number of rows deleted.
-        """
-        if condition == "1=1":
-            log.warning("db.delete_all_warning", table=table_name,
-                        msg="Attempted to delete all rows with condition '1=1'. Preventing accidental mass deletion.")
-            return 0  # Prevent accidental truncation without an explicit condition
+        try:
+            with closing(get_conn()) as conn:
+                rows = conn.execute(sql).fetchall()
+                return [dict(row) for row in rows]
+
+        except sqlite3.Error as exc:
+            raise StorageError(
+                f"Unable to retrieve rows from {table_name!r}: {exc}"
+            ) from exc
+
+    def delete_rows(
+        self,
+        table_name: str,
+        condition: str = "0=1",
+    ) -> int:
+        """Delete rows matching a trusted SQL condition."""
+        table_name = _validate_table_name(table_name)
+
+        if condition.strip() == "1=1":
+            log.warning(
+                "db.delete_all_blocked",
+                table=table_name,
+            )
+            return 0
 
         sql = f"DELETE FROM {table_name} WHERE {condition};"
 
-        with closing(get_conn()) as conn:
-            cur = conn.cursor()
-            cur.execute(sql)
-            deleted_count = cur.rowcount
-            conn.commit()
-            return deleted_count
+        try:
+            with closing(get_conn()) as conn:
+                with conn:
+                    cursor = conn.execute(sql)
+                    return cursor.rowcount
 
+        except sqlite3.Error as exc:
+            raise StorageError(
+                f"Unable to delete rows from {table_name!r}: {exc}"
+            ) from exc
 
-# ------------------------------------------------------------
-# Saving Logic (Modified for GA tracking and title storage)
-# ------------------------------------------------------------
-
-# ... (Rest of the file remains the same) ...
 
 def save_scenario(
-        table_name: str,
-        *,
-        title: str,  # <--- CHANGE 2a: NEW ARGUMENT
-        params,
-        narrative,
-        timeline,
-        model_used,
-        signals=None,
-        generation_origin: str = 'SPECULATIVE'
-):
+    table_name: str,
+    *,
+    title: str,
+    params: dict[str, Any],
+    narrative: str,
+    timeline: list[dict[str, Any]],
+    model_used: Optional[str],
+    signals: Optional[list[Any]] = None,
+    generation_origin: str = "SPECULATIVE",
+    scenario_id: Optional[str] = None,
+) -> str:
     """
-    Generic save function used by all generators.
-    """
-    scenario_id = str(uuid.uuid4())
-    conn = get_conn()
-    cur = conn.cursor()
+    Persist a scenario and return its authoritative ID.
 
-    cur.execute(
-        f"""
+    JSON serialization occurs before the transaction so serialization
+    failures cannot leave a partially written scenario.
+    """
+    table_name = _validate_table_name(table_name)
+
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Scenario title must be a nonempty string.")
+
+    if not isinstance(narrative, str) or not narrative.strip():
+        raise ValueError("Scenario narrative must be a nonempty string.")
+
+    if not isinstance(params, dict):
+        raise TypeError("Scenario parameters must be a dictionary.")
+
+    if not isinstance(timeline, list):
+        raise TypeError("Scenario timeline must be a list.")
+
+    if signals is not None and not isinstance(signals, list):
+        raise TypeError("Scenario signals must be a list or None.")
+
+    try:
+        params_json = json.dumps(params, ensure_ascii=False)
+        timeline_json = json.dumps(timeline, ensure_ascii=False)
+        signals_json = json.dumps(signals or [], ensure_ascii=False)
+
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Scenario contains non-serializable data: {exc}"
+        ) from exc
+
+    scenario_id = scenario_id or str(uuid.uuid4())
+
+    sql = f"""
         INSERT INTO {table_name}
-        (id, title, params, narrative, timeline, model_used, signals, generation_origin)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        [
-            scenario_id,
-            title,  # <--- CHANGE 2d: NEW VALUE
-            json.dumps(params),
+        (
+            id,
+            title,
+            params,
             narrative,
-            json.dumps(timeline),
+            timeline,
             model_used,
-            json.dumps(signals or []),
-            generation_origin,
-        ]
+            signals,
+            generation_origin
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """
+
+    values = (
+        scenario_id,
+        title,
+        params_json,
+        narrative,
+        timeline_json,
+        model_used,
+        signals_json,
+        generation_origin,
     )
 
-    conn.commit()
-    conn.close()
+    try:
+        with closing(get_conn()) as conn:
+            with conn:
+                conn.execute(sql, values)
+
+    except sqlite3.Error as exc:
+        log.error(
+            "db.scenario_save.failed",
+            table=table_name,
+            scenario_id=scenario_id,
+            error=str(exc),
+        )
+        raise StorageError(
+            f"Unable to save scenario {scenario_id}: {exc}"
+        ) from exc
+
+    log.info(
+        "db.scenario_save.succeeded",
+        table=table_name,
+        scenario_id=scenario_id,
+    )
 
     return scenario_id
 
 
-# ------------------------------------------------------------
-# Wrappers for S & EV Generators
-# ------------------------------------------------------------
-
-def save_scenario_s(*, title, params, narrative, timeline, model_used):
-    """Wrapper for s-generator (no signals field, origin defaults to SPECULATIVE)."""
+def save_scenario_s(
+    *,
+    title: str,
+    params: dict[str, Any],
+    narrative: str,
+    timeline: list[dict[str, Any]],
+    model_used: Optional[str],
+    scenario_id: Optional[str] = None,
+) -> str:
+    """Persist a speculative scenario."""
     return save_scenario(
         "s_scenarios",
         title=title,
@@ -217,70 +322,90 @@ def save_scenario_s(*, title, params, narrative, timeline, model_used):
         timeline=timeline,
         model_used=model_used,
         signals=[],
-        generation_origin='SPECULATIVE'
+        generation_origin="SPECULATIVE",
+        scenario_id=scenario_id,
     )
 
 
-def save_scenario_ev(*, title: str, params, narrative, timeline, model_used, signals,
-                     generation_origin: str = 'EVIDENCE'):
-    """
-    Wrapper for ev-generator, now including the generation_origin and title.
-    Default origin is 'EVIDENCE'. GA loop will pass 'GA_CROSSOVER'.
-    """
+def save_scenario_ev(
+    *,
+    title: str,
+    params: dict[str, Any],
+    narrative: str,
+    timeline: list[dict[str, Any]],
+    model_used: Optional[str],
+    signals: list[Any],
+    generation_origin: str = "EVIDENCE",
+    scenario_id: Optional[str] = None,
+) -> str:
+    """Persist an evidence-based scenario."""
     return save_scenario(
         "ev_scenarios",
-        title=title,  # <--- CHANGE 3: PASS TITLE
+        title=title,
         params=params,
         narrative=narrative,
         timeline=timeline,
         model_used=model_used,
         signals=signals,
-        generation_origin=generation_origin
+        generation_origin=generation_origin,
+        scenario_id=scenario_id,
     )
 
 
-# ------------------------------------------------------------
-# GA/Analyzer Functions
-# ------------------------------------------------------------
-
-def get_scenarios_from_db(table_name: str) -> List[Dict[str, Any]]:
-    """
-    Fetches all scenarios from the specified table. Crucial for Analyzer evaluation.
-    (Kept for compatibility, though Storage.get_rows_by_condition is better)
-    """
-    # Simply delegate to the new Storage method
-    storage = Storage()
-    return storage.get_rows_by_condition(table_name)
+def get_scenarios_from_db(
+    table_name: str,
+) -> list[dict[str, Any]]:
+    """Retrieve scenarios from a known scenario table."""
+    return Storage().get_rows_by_condition(table_name)
 
 
-def update_scenario_index(scenario_id: str, plausibility_index: float):
-    """
-    Updates the plausibility_index column for a specific scenario ID in the ev_scenarios table.
-    """
-    db_path = settings.db_path
-    sql = """
-          UPDATE ev_scenarios
-          SET plausibility_index = ?
-          WHERE id = ?; \
-          """
+def update_scenario_index(
+    scenario_id: str,
+    plausibility_index: float,
+) -> None:
+    """Update an EV scenario's plausibility score."""
+    if not isinstance(plausibility_index, (int, float)):
+        raise TypeError("Plausibility index must be numeric.")
+
+    if isinstance(plausibility_index, bool):
+        raise TypeError("Plausibility index cannot be boolean.")
+
+    if not 0.0 <= plausibility_index <= 1.0:
+        raise ValueError(
+            "Plausibility index must be between 0 and 1."
+        )
 
     try:
-        with closing(sqlite3.connect(db_path)) as conn:
-            conn.execute(sql, (plausibility_index, scenario_id))
-            conn.commit()
-            log.debug("db.update_index.success", id=scenario_id[:8], index=plausibility_index)
-    except sqlite3.OperationalError as e:
-        log.error("db.update_index.failed", error=str(e), id=scenario_id[:8])
-        # Inform the user about the likely cause
-        print("\n--- DATABASE ERROR ---\n"
-              "Operation failed! This likely means the 'plausibility_index' column "
-              "was NOT added to the 'ev_scenarios' table via migration/init_db.\n"
-              f"Error: {e}\n"
-              "----------------------\n")
+        with closing(get_conn()) as conn:
+            with conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE ev_scenarios
+                    SET plausibility_index = ?
+                    WHERE id = ?
+                    """,
+                    (plausibility_index, scenario_id),
+                )
+
+                if cursor.rowcount == 0:
+                    log.warning(
+                        "db.update_index.not_found",
+                        scenario_id=scenario_id,
+                    )
+
+    except sqlite3.Error as exc:
+        log.error(
+            "db.update_index.failed",
+            scenario_id=scenario_id,
+            error=str(exc),
+        )
+        raise StorageError(
+            f"Unable to update scenario index: {exc}"
+        ) from exc
 
 
-# --- Other Utilities ---
-def save_asi_scenario(scenario: dict):
-    """Save full v1-compliant scenario as JSON"""
-    # Placeholder for future implementation
-    pass
+def save_asi_scenario(scenario: dict[str, Any]) -> None:
+    """Placeholder for future complete-schema scenario persistence."""
+    raise NotImplementedError(
+        "Full-schema scenario persistence is not implemented."
+    )
