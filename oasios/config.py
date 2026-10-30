@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# oasios/config.py
 """
 Created on Sat Nov  8 15:33:57 2025
-
 @author: mike
 """
 

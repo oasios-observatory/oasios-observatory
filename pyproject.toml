@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{include = "oasios"}]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = ">=3.11,<4.0"
 typer = {extras = ["all"], version = "^0.12"}
 ollama = "^0.3"
 structlog = "^24.1"
@@ -25,6 +25,8 @@ reportlab = "4.4.6"
 package-name = "^0.1"
 xmltodict = "^1.0.4"
 numpy = ">=2.0,<2.3"
+pandas-stubs = "~=2.3.3"
+streamlit = "^1.66.1"
 
 [tool.poetry.extras]
 report = ["pandas", "matplotlib", "reportlab"]

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# oasios/s_generator/abbreviator_s.py
 
 """Generate compact identifiers for speculative ASI scenarios."""
 

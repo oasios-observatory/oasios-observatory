@@ -1,287 +1,857 @@
-# oasios/dashboard/asi_scenarios_viewer.py
-# Run in terminal 'streamlit run oasios/dashboard/asi_scenario_viewer.py'
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
-import streamlit as st
-import sqlite3
+"""
+OASIOS Observatory - Scenario Viewer
+
+Displays:
+1. The 10 most recently generated scenarios.
+2. Database statistics.
+3. Most common categorical scenario parameters.
+4. Average numerical scenario parameters.
+
+Run:
+    streamlit run oasios/dashboard/asi_scenarios_viewer.py
+"""
+
 import json
-import pandas as pd
-from pathlib import Path
+import sqlite3
 
-# Page config
+from collections import Counter
+from contextlib import closing
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+import streamlit as st
+
+from oasios.config import settings
+
+
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
+
 st.set_page_config(
-    page_title="OASIOS Observatory Viewer",
+    page_title="OASIOS Observatory",
     page_icon="🔭",
-    layout="wide"
+    layout="wide",
 )
 
-# Database path
-DB_PATH = Path("data/asi_scenarios.db")
+st.title("🔭 OASIOS Observatory")
+st.caption("ASI Scenario Database Explorer")
 
 
-def get_connection():
-    """Create database connection"""
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+DB_PATH = Path(settings.db_path)
+
+TABLES = {
+    "Speculative": "s_scenarios",
+    "Evidence-based": "ev_scenarios",
+}
+
+LATEST_SCENARIOS_LIMIT = 10
+
+
+# Categorical scenario parameters.
+
+CATEGORICAL_PARAMETERS = {
+    "Initial Origin": ("origin", "initial_origin"),
+    "Development Dynamics": ("origin", "development_dynamics"),
+
+    "Architecture": ("architecture", "type"),
+    "Deployment Topology": ("architecture", "deployment_topology"),
+
+    "Substrate": ("substrate", "type"),
+    "Deployment Medium": ("substrate", "deployment_medium"),
+    "Substrate Resilience": ("substrate", "resilience"),
+
+    "Oversight Type": ("oversight_structure", "type"),
+    "Oversight Effectiveness": (
+        "oversight_structure",
+        "effectiveness",
+    ),
+    "Control Surface": (
+        "oversight_structure",
+        "control_surface",
+    ),
+
+    "Stated Goal": ("goals_and_behavior", "stated_goal"),
+    "Goal Stability": ("goals_and_behavior", "goal_stability"),
+
+    "Deployment Strategy": (
+        "impact_and_control",
+        "deployment_strategy",
+    ),
+}
+
+
+# Numerical scenario parameters.
+
+NUMERIC_PARAMETERS = {
+    "Agency": ("core_capabilities", "agency_level"),
+    "Autonomy": ("core_capabilities", "autonomy_degree"),
+    "Alignment": ("core_capabilities", "alignment_score"),
+    "Opacity": ("goals_and_behavior", "opacity"),
+    "Deceptiveness": ("goals_and_behavior", "deceptiveness"),
+}
+
+
+# ============================================================
+# DATABASE
+# ============================================================
+
+@st.cache_data(ttl=10, show_spinner=False)
+def load_database_data():
+    """Load scenario records from the configured OASIOS database."""
+
     if not DB_PATH.exists():
-        st.error(f"Database not found at {DB_PATH}")
-        return None
-    return sqlite3.connect(str(DB_PATH))
+        return {
+            "error": f"Database not found: {DB_PATH}",
+            "scenarios": [],
+        }
 
-
-def load_scenarios(table_name):
-    """Load scenarios from specified table"""
-    conn = get_connection()
-    if not conn:
-        return []
+    scenarios = []
 
     try:
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT id, title, data FROM {table_name}")
-        rows = cursor.fetchall()
+        with closing(
+            sqlite3.connect(str(DB_PATH), timeout=30)
+        ) as conn:
 
-        scenarios = []
-        for row in rows:
-            try:
-                data = json.loads(row[2])
-                scenarios.append({
-                    'id': row[0],
-                    'title': row[1],
-                    'data': data
-                })
-            except json.JSONDecodeError:
-                st.warning(f"Failed to parse scenario {row[0]}")
+            conn.row_factory = sqlite3.Row
 
-        return scenarios
-    except sqlite3.Error as e:
-        st.error(f"Database error: {e}")
-        return []
-    finally:
-        conn.close()
+            for category, table in TABLES.items():
+
+                # Check whether the table exists.
+                table_exists = conn.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table' AND name = ?
+                    """,
+                    (table,),
+                ).fetchone()
+
+                if not table_exists:
+                    continue
+
+                cursor = conn.execute(
+                    f"SELECT * FROM {table}"
+                )
+
+                for row in cursor.fetchall():
+
+                    record = dict(row)
+
+                    scenario_id = record.get("id")
+
+                    raw_data = record.get("scenario_data")
+
+                    try:
+                        if isinstance(raw_data, dict):
+                            data = raw_data
+
+                        elif isinstance(raw_data, str) and raw_data.strip():
+                            data = json.loads(raw_data)
+
+                        else:
+                            data = {}
+
+                        if not isinstance(data, dict):
+                            data = {}
+
+                    except (json.JSONDecodeError, TypeError) as exc:
+
+                        st.warning(
+                            f"Could not parse scenario "
+                            f"{scenario_id}: {exc}"
+                        )
+
+                        data = {}
+
+                    scenarios.append({
+                        "id": scenario_id,
+                        "title": (
+                            record.get("title")
+                            or data.get("title")
+                            or f"Scenario {scenario_id}"
+                        ),
+                        "category": category,
+                        "created_at": record.get("created_at"),
+                        "model_used": record.get("model_used"),
+                        "data": data,
+                        "legacy_params": record.get("params"),
+                        "legacy_narrative": record.get("narrative"),
+                        "legacy_timeline": record.get("timeline"),
+                    })
+
+        # Sort scenarios from newest to oldest.
+        scenarios.sort(
+            key=lambda item: (
+                str(item["created_at"] or ""),
+                str(item["id"] or ""),
+            ),
+            reverse=True,
+        )
+
+        return {
+            "error": None,
+            "scenarios": scenarios,
+        }
+
+    except sqlite3.Error as exc:
+
+        return {
+            "error": str(exc),
+            "scenarios": [],
+        }
 
 
-def render_single_asi_scenario(scenario):
-    """Render single ASI scenario details"""
-    data = scenario['data']
+# ============================================================
+# DATA EXTRACTION
+# ============================================================
 
-    # Header
-    st.subheader(f"📊 {scenario['title']}")
+def get_nested_value(
+    data: dict,
+    section: str,
+    parameter: str,
+    default: Any = None,
+):
+    """Safely retrieve nested scenario parameters."""
 
-    # Metadata in columns
-    col1, col2, col3 = st.columns(3)
+    if not isinstance(data, dict):
+        return default
 
-    def safe_display(value):
-        """Convert complex values to display strings"""
-        if isinstance(value, dict):
-            return ", ".join(f"{k}: {v}" for k, v in value.items())
-        elif isinstance(value, list):
-            return ", ".join(str(v) for v in value)
-        return str(value)
+    section_data = data.get(section, {})
 
-    with col1:
-        st.metric("Scenario ID", str(scenario['id'])[:8] + "...")
-        if 'origin' in data:
-            st.write("**Origin:**", safe_display(data['origin']))
+    if not isinstance(section_data, dict):
+        return default
 
-    with col2:
-        if 'emergence_type' in data:
-            st.write("**Emergence Type:**", safe_display(data['emergence_type']))
-        if 'alignment' in data:
-            st.write("**Alignment:**", safe_display(data['alignment']))
-
-    with col3:
-        if 'speed' in data:
-            st.write("**Speed:**", safe_display(data['speed']))
-        if 'capability_level' in data:
-            st.write("**Capability:**", safe_display(data['capability_level']))
-
-    # Timeline
-    if 'timeline' in data and data['timeline']:
-        st.markdown("### 📅 Timeline")
-        timeline_df = pd.DataFrame(data['timeline'])
-        if not timeline_df.empty:
-            st.dataframe(timeline_df, width = "stretch", hide_index=True)
-
-    # Narrative
-    if 'narrative' in data:
-        st.markdown("### 📖 Narrative")
-        st.markdown(f"_{data['narrative']}_")
-
-    # Full data (expandable)
-    with st.expander("🔍 View Raw JSON Data"):
-        st.json(data)
+    return section_data.get(parameter, default)
 
 
-def render_multi_asi_scenario(scenario):
-    """Render multi-ASI scenario details"""
-    data = scenario['data']
+def extract_parameter(
+    scenario: dict,
+    section: str,
+    parameter: str,
+):
+    """Extract a parameter from a scenario."""
 
-    # Header
-    st.subheader(f"🌐 {scenario['title']}")
+    return get_nested_value(
+        scenario.get("data", {}),
+        section,
+        parameter,
+    )
 
-    # Swarm metadata
-    col1, col2, col3 = st.columns(3)
 
-    def safe_display(value):
-        """Convert complex values to display strings"""
-        if isinstance(value, dict):
-            return ", ".join(f"{k}: {v}" for k, v in value.items())
-        elif isinstance(value, list):
-            return ", ".join(str(v) for v in value)
-        return str(value)
+def get_narrative(scenario: dict) -> str:
+    """Extract scenario narrative."""
 
-    with col1:
-        st.write("**Scenario ID:**", str(scenario['id'])[:8] + "...")
-        if 'num_asis' in data:
-            st.metric("Number of ASIs", data['num_asis'])
+    data = scenario.get("data", {})
 
-    with col2:
-        if 'simulation_years' in data:
-            st.metric("Simulation Years", data['simulation_years'])
-        if 'total_interactions' in data:
-            st.metric("Total Interactions", data['total_interactions'])
+    content = data.get("scenario_content", {})
 
-    with col3:
-        if 'dominant_pattern' in data:
-            st.write("**Dominant Pattern:**", safe_display(data['dominant_pattern']))
+    if isinstance(content, dict):
 
-    # ASI Entities
-    if 'asis' in data and data['asis']:
-        st.markdown("### 🤖 ASI Entities")
-        asis_list = []
-        for asi in data['asis']:
-            asis_list.append({
-                'ID': asi.get('id', 'N/A'),
-                'Name': asi.get('name', 'N/A'),
-                'Origin': asi.get('origin', 'N/A'),
-                'Alignment': asi.get('alignment', 'N/A'),
-                'Capability': asi.get('capability_level', 'N/A')
+        narrative = content.get("narrative")
+
+        if narrative:
+            return str(narrative)
+
+    return (
+        scenario.get("legacy_narrative")
+        or "No narrative available."
+    )
+
+
+def get_timeline(scenario: dict) -> list:
+    """Extract timeline phases."""
+
+    data = scenario.get("data", {})
+
+    content = data.get("scenario_content", {})
+
+    if isinstance(content, dict):
+
+        timeline = content.get("timeline", {})
+
+        if isinstance(timeline, list):
+            return timeline
+
+        if isinstance(timeline, dict):
+
+            phases = timeline.get("phases", [])
+
+            if isinstance(phases, list):
+                return phases
+
+    try:
+
+        legacy = scenario.get("legacy_timeline")
+
+        if isinstance(legacy, list):
+            return legacy
+
+        if isinstance(legacy, str) and legacy.strip():
+
+            parsed = json.loads(legacy)
+
+            if isinstance(parsed, list):
+                return parsed
+
+            if isinstance(parsed, dict):
+                return parsed.get("phases", [])
+
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    return []
+
+
+def format_value(value: Any) -> str:
+    """Format parameter values for display."""
+
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(
+            str(item) for item in value
+        ) or "None"
+
+    if isinstance(value, dict):
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+        )
+
+    if value is None:
+        return "Unknown"
+
+    return str(value)
+
+
+# ============================================================
+# STATISTICS
+# ============================================================
+
+def calculate_statistics(scenarios: list) -> dict:
+    """Calculate database statistics."""
+
+    statistics = {
+        "total": len(scenarios),
+        "speculative": 0,
+        "evidence": 0,
+        "categorical": {},
+        "numeric": {},
+    }
+
+    # Count scenario categories.
+
+    for scenario in scenarios:
+
+        if scenario["category"] == "Speculative":
+            statistics["speculative"] += 1
+
+        else:
+            statistics["evidence"] += 1
+
+    # Calculate categorical frequencies.
+
+    for label, (section, parameter) in CATEGORICAL_PARAMETERS.items():
+
+        values = []
+
+        for scenario in scenarios:
+
+            value = extract_parameter(
+                scenario,
+                section,
+                parameter,
+            )
+
+            if value is None:
+                continue
+
+            if isinstance(value, (list, tuple, set)):
+
+                values.extend(
+                    str(item)
+                    for item in value
+                    if item is not None
+                )
+
+            else:
+                values.append(str(value))
+
+        statistics["categorical"][label] = Counter(values)
+
+    # Calculate numerical statistics.
+
+    for label, (section, parameter) in NUMERIC_PARAMETERS.items():
+
+        values = []
+
+        for scenario in scenarios:
+
+            value = extract_parameter(
+                scenario,
+                section,
+                parameter,
+            )
+
+            if (
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+            ):
+
+                values.append(float(value))
+
+        statistics["numeric"][label] = values
+
+    return statistics
+
+
+# ============================================================
+# SCENARIO PARAMETERS
+# ============================================================
+
+def render_scenario_parameters(scenario: dict):
+    """Render expandable scenario parameters."""
+
+    parameter_rows = []
+
+    for label, (section, parameter) in CATEGORICAL_PARAMETERS.items():
+
+        value = extract_parameter(
+            scenario,
+            section,
+            parameter,
+        )
+
+        if value is not None:
+
+            parameter_rows.append({
+                "Parameter": label,
+                "Value": format_value(value),
             })
-        st.dataframe(pd.DataFrame(asis_list), use_container_width=True, hide_index=True)
 
-    # Interactions
-    if 'interactions' in data and data['interactions']:
-        st.markdown("### 🔗 Key Interactions")
-        interactions_df = pd.DataFrame(data['interactions'][:20])  # Show first 20
-        if not interactions_df.empty:
-            st.dataframe(interactions_df, use_container_width=True, hide_index=True)
-            if len(data['interactions']) > 20:
-                st.info(f"Showing first 20 of {len(data['interactions'])} interactions")
+    for label, (section, parameter) in NUMERIC_PARAMETERS.items():
 
-    # Narrative
-    if 'narrative' in data:
-        st.markdown("### 📖 Swarm Narrative")
-        st.markdown(f"_{data['narrative']}_")
+        value = extract_parameter(
+            scenario,
+            section,
+            parameter,
+        )
 
-    # Full data (expandable)
-    with st.expander("🔍 View Raw JSON Data"):
-        st.json(data)
+        if value is not None:
+
+            parameter_rows.append({
+                "Parameter": label,
+                "Value": format_value(value),
+            })
+
+    with st.expander("⚙️ Scenario Parameters", expanded=False):
+
+        if parameter_rows:
+
+            st.dataframe(
+                pd.DataFrame(parameter_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        else:
+            st.info("No structured parameters available.")
+
+        st.markdown("#### Complete Scenario Data")
+
+        st.json(scenario.get("data", {}))
 
 
-# Main UI
-st.title("🔭 OASIOS Observatory Viewer")
-st.markdown("*Explore ASI scenario simulations*")
+# ============================================================
+# LATEST SCENARIOS
+# ============================================================
 
-# Sidebar for navigation
-with st.sidebar:
-    st.header("Navigation")
-    view_mode = st.radio(
-        "Select View",
-        ["Single ASI Scenarios", "Multi-ASI Scenarios", "Statistics"]
+def render_scenario(scenario: dict):
+    """Render an individual scenario."""
+
+    st.subheader(
+        f"📊 {scenario['title']}"
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        st.caption("Scenario ID")
+        st.code(str(scenario["id"]))
+
+    with col2:
+
+        st.caption("Category")
+        st.write(scenario["category"])
+
+    with col3:
+
+        st.caption("Creation Date")
+        st.write(
+            scenario["created_at"] or "Unknown"
+        )
+
+    st.caption(
+        f"Model: {scenario['model_used'] or 'Unknown'}"
     )
 
     st.markdown("---")
-    st.markdown("### About")
-    st.markdown("OASIOS Observatory simulates trajectories of Artificial Superintelligence (ASI).")
-    st.markdown("[GitHub Repository](https://github.com/oasios-observatory/oasios-observatory)")
 
-# Check database exists
-if not DB_PATH.exists():
-    st.error(f"⚠️ Database not found at `{DB_PATH}`")
-    st.info("Generate scenarios first using: `oasios generate --count 10`")
-    st.stop()
+    # Narrative.
 
-# Single ASI View
-if view_mode == "Single ASI Scenarios":
-    st.header("Single ASI Scenarios")
+    st.markdown("#### 📖 Full Narrative")
 
-    scenarios = load_scenarios("scenarios")
+    st.markdown(
+        get_narrative(scenario)
+    )
 
-    if not scenarios:
-        st.warning("No single ASI scenarios found in database.")
-        st.info("Generate scenarios using: `oasios generate --count 10`")
+    # Timeline.
+
+    timeline = get_timeline(scenario)
+
+    if timeline:
+
+        st.markdown("#### 📅 Timeline")
+
+        if all(isinstance(item, dict) for item in timeline):
+
+            st.dataframe(
+                pd.DataFrame(timeline),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        else:
+
+            for index, phase in enumerate(timeline, start=1):
+                st.write(f"**Phase {index}:** {format_value(phase)}")
+
     else:
-        st.success(f"Found {len(scenarios)} scenarios")
 
-        # Scenario selector
-        scenario_titles = [f"{s['title']} ({s['id'][:8]}...)" for s in scenarios]
-        selected_idx = st.selectbox("Select Scenario", range(len(scenarios)),
-                                    format_func=lambda i: scenario_titles[i])
+        st.info("No timeline available.")
 
-        if selected_idx is not None:
-            scenario = scenarios[selected_idx]
+    # Expandable parameters.
 
-            st.markdown("---")
-            render_single_asi_scenario(scenario)
+    render_scenario_parameters(scenario)
 
-# Multi-ASI View
-elif view_mode == "Multi-ASI Scenarios":
-    st.header("Multi-ASI Scenarios")
+    # Individual JSON download.
 
-    scenarios = load_scenarios("multi_asi_scenarios")
+    download_data = {
+        "id": scenario["id"],
+        "title": scenario["title"],
+        "category": scenario["category"],
+        "created_at": scenario["created_at"],
+        "model_used": scenario["model_used"],
+        "scenario_data": scenario["data"],
+    }
 
-    if not scenarios:
-        st.warning("No multi-ASI scenarios found in database.")
-        st.info("Generate swarm scenarios using: `oasios swarm --count 5`")
-    else:
-        st.success(f"Found {len(scenarios)} swarm scenarios")
+    st.download_button(
+        label="⬇️ Download Scenario JSON",
+        data=json.dumps(
+            download_data,
+            indent=4,
+            ensure_ascii=False,
+            default=str,
+        ),
+        file_name=f"scenario_{scenario['id']}.json",
+        mime="application/json",
+        key=f"download_{scenario['category']}_{scenario['id']}",
+    )
 
-        # Scenario selector
-        scenario_titles = [f"{s['title']} ({s['id'][:8]}...)" for s in scenarios]
-        selected_idx = st.selectbox("Select Scenario", range(len(scenarios)),
-                                    format_func=lambda i: scenario_titles[i])
 
-        if selected_idx is not None:
-            scenario = scenarios[selected_idx]
+def render_latest_scenarios(scenarios: list):
+    """Display the latest ten scenarios."""
 
-            st.markdown("---")
-            render_multi_asi_scenario(scenario)
+    st.header("🕒 Latest 10 Scenarios")
 
-# Statistics View
-elif view_mode == "Statistics":
-    st.header("Database Statistics")
+    latest = scenarios[:LATEST_SCENARIOS_LIMIT]
 
-    col1, col2 = st.columns(2)
+    if not latest:
 
-    with col1:
-        st.subheader("Single ASI Scenarios")
-        single_scenarios = load_scenarios("scenarios")
-        st.metric("Total Scenarios", len(single_scenarios))
+        st.info("No scenarios found.")
 
-        if single_scenarios:
-            # Extract some stats
-            origins = [s['data'].get('origin', 'Unknown') for s in single_scenarios]
-            origin_counts = pd.Series(origins).value_counts()
-            st.bar_chart(origin_counts)
+        return
 
-    with col2:
-        st.subheader("Multi-ASI Scenarios")
-        multi_scenarios = load_scenarios("multi_asi_scenarios")
-        st.metric("Total Swarm Scenarios", len(multi_scenarios))
+    st.caption(
+        f"Showing {len(latest)} most recently generated scenarios."
+    )
 
-        if multi_scenarios:
-            # Extract ASI counts
-            asi_counts = [s['data'].get('num_asis', 0) for s in multi_scenarios]
-            if asi_counts:
-                st.metric("Avg ASIs per Swarm", f"{sum(asi_counts) / len(asi_counts):.1f}")
+    for index, scenario in enumerate(latest, start=1):
 
-    # Combined timeline
+        with st.expander(
+            f"{index}. {scenario['title']} "
+            f"— {scenario['category']} "
+            f"— {scenario['created_at'] or 'Unknown date'}",
+            expanded=(index == 1),
+        ):
+
+            render_scenario(scenario)
+
+
+# ============================================================
+# STATISTICS VIEW
+# ============================================================
+
+def render_statistics(scenarios: list):
+    """Display database statistics."""
+
+    st.header("📈 Database Statistics")
+
+    stats = calculate_statistics(scenarios)
+
+    # --------------------------------------------------------
+    # Main metrics
+    # --------------------------------------------------------
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric(
+        "Total Scenarios",
+        stats["total"],
+    )
+
+    col2.metric(
+        "Speculative Scenarios",
+        stats["speculative"],
+    )
+
+    col3.metric(
+        "Evidence-based Scenarios",
+        stats["evidence"],
+    )
+
     st.markdown("---")
-    st.subheader("Generation Timeline")
 
-    all_scenarios = single_scenarios + multi_scenarios
-    if all_scenarios:
-        st.info(f"Total scenarios across both tables: {len(all_scenarios)}")
-    else:
-        st.warning("No scenarios found in database.")
+    # --------------------------------------------------------
+    # Numerical statistics
+    # --------------------------------------------------------
 
-# Footer
-st.markdown("---")
-st.markdown("*Built with Streamlit | OASIOS Observatory v0.1.1*")
+    st.subheader("📊 Average Parameter Values")
+
+    numeric_rows = []
+
+    for label, values in stats["numeric"].items():
+
+        numeric_rows.append({
+            "Parameter": label,
+            "Average": (
+                round(sum(values) / len(values), 3)
+                if values else "N/A"
+            ),
+            "Minimum": (
+                round(min(values), 3)
+                if values else "N/A"
+            ),
+            "Maximum": (
+                round(max(values), 3)
+                if values else "N/A"
+            ),
+            "Samples": len(values),
+        })
+
+    st.dataframe(
+        pd.DataFrame(numeric_rows),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.markdown("---")
+
+    # --------------------------------------------------------
+    # Categorical statistics
+    # --------------------------------------------------------
+
+    st.subheader("🏆 Most Common Parameters")
+
+    for label, counter in stats["categorical"].items():
+
+        with st.expander(
+            label,
+            expanded=label in (
+                "Deployment Strategy",
+                "Architecture",
+                "Substrate",
+                "Oversight Type",
+            ),
+        ):
+
+            if not counter:
+
+                st.info("No data available.")
+
+                continue
+
+            total_values = sum(counter.values())
+
+            frequency_rows = [
+                {
+                    "Value": value,
+                    "Count": count,
+                    "Percentage": round(
+                        count / total_values * 100,
+                        1,
+                    ),
+                }
+                for value, count in counter.most_common()
+            ]
+
+            st.dataframe(
+                pd.DataFrame(frequency_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            top_value, top_count = counter.most_common(1)[0]
+
+            st.success(
+                f"Most common: {top_value} "
+                f"({top_count} occurrences)"
+            )
+
+    # --------------------------------------------------------
+    # Database distribution
+    # --------------------------------------------------------
+
+    st.markdown("---")
+
+    st.subheader("📚 Scenario Distribution")
+
+    distribution = pd.DataFrame({
+        "Category": [
+            "Speculative",
+            "Evidence-based",
+        ],
+        "Count": [
+            stats["speculative"],
+            stats["evidence"],
+        ],
+    })
+
+    st.bar_chart(
+        distribution.set_index("Category")
+    )
+
+
+# ============================================================
+# MAIN APPLICATION
+# ============================================================
+
+def main():
+
+    # --------------------------------------------------------
+    # Sidebar
+    # --------------------------------------------------------
+
+    with st.sidebar:
+
+        st.header("🔭 OASIOS")
+
+        st.caption("Scenario Observatory")
+
+        st.markdown("---")
+
+        st.write("**Database:**")
+
+        st.code(str(DB_PATH))
+
+        if st.button(
+            "🔄 Refresh Database",
+            use_container_width=True,
+        ):
+
+            load_database_data.clear()
+            st.rerun()
+
+        st.markdown("---")
+
+        st.caption(
+            "Explore generated scenarios and "
+            "database-wide statistical information."
+        )
+
+    # --------------------------------------------------------
+    # Database validation
+    # --------------------------------------------------------
+
+    if not DB_PATH.exists():
+
+        st.error(
+            f"Database not found: {DB_PATH}"
+        )
+
+        st.info(
+            "Generate scenarios first using the OASIOS generator."
+        )
+
+        st.stop()
+
+    # --------------------------------------------------------
+    # Load database
+    # --------------------------------------------------------
+
+    with st.spinner("Loading OASIOS scenarios..."):
+
+        result = load_database_data()
+
+    if result["error"]:
+
+        st.error(
+            f"Database error: {result['error']}"
+        )
+
+        st.stop()
+
+    scenarios = result["scenarios"]
+
+    if not scenarios:
+
+        st.warning(
+            "The database exists, but no scenarios were found."
+        )
+
+        st.stop()
+
+    # --------------------------------------------------------
+    # Navigation
+    # --------------------------------------------------------
+
+    tab_latest, tab_statistics = st.tabs([
+        "🕒 Latest 10 Scenarios",
+        "📈 Database Statistics",
+    ])
+
+    with tab_latest:
+
+        render_latest_scenarios(scenarios)
+
+    with tab_statistics:
+
+        render_statistics(scenarios)
+
+    # --------------------------------------------------------
+    # Footer
+    # --------------------------------------------------------
+
+    st.markdown("---")
+
+    st.caption(
+        f"OASIOS Observatory | "
+        f"{len(scenarios)} scenarios loaded | "
+        f"Database: {DB_PATH.name}"
+    )
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
+
+if __name__ == "__main__":
+    main()

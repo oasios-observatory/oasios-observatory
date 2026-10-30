@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-"""SQLite persistence for OASIOS scenarios."""
+#oasios/common/storage.py
+"""Hardened SQLite persistence for OASIOS scenarios."""
 
 import json
 import math
+import re
 import sqlite3
 import uuid
 
@@ -16,20 +17,66 @@ from oasios.config import settings
 from oasios.logger import log
 
 
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
 ALLOWED_TABLES = frozenset({
     "s_scenarios",
     "ev_scenarios",
 })
 
+ALLOWED_COLUMNS = frozenset({
+    "id",
+    "title",
+    "params",
+    "narrative",
+    "timeline",
+    "model_used",
+    "signals",
+    "created_at",
+    "plausibility_index",
+    "generation_origin",
+    "scenario_data",
+})
+
+ALLOWED_OPERATORS = frozenset({
+    "=",
+    "!=",
+    ">",
+    ">=",
+    "<",
+    "<=",
+})
+
+COLUMN_PATTERN = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*$"
+)
+
+
+# ============================================================
+# EXCEPTIONS
+# ============================================================
 
 class StorageError(RuntimeError):
     """Raised when a scenario persistence operation fails."""
 
 
-def _validate_table_name(table_name: str) -> str:
-    """Validate table names against the application whitelist."""
+class DuplicateScenarioError(StorageError):
+    """Raised when a scenario ID already exists."""
 
-    if table_name not in ALLOWED_TABLES:
+
+# ============================================================
+# VALIDATION HELPERS
+# ============================================================
+
+def _validate_table_name(table_name: str) -> str:
+    """Validate database table names against the whitelist."""
+
+    if (
+        not isinstance(table_name, str)
+        or table_name not in ALLOWED_TABLES
+    ):
         raise ValueError(
             f"Unsupported database table: {table_name!r}"
         )
@@ -37,8 +84,159 @@ def _validate_table_name(table_name: str) -> str:
     return table_name
 
 
+def _validate_uuid(value: str) -> str:
+    """Validate canonical UUID representation."""
+
+    if not isinstance(value, str):
+        raise ValueError(
+            "Scenario ID must be a string."
+        )
+
+    try:
+        parsed = uuid.UUID(value)
+
+    except (ValueError, AttributeError) as exc:
+        raise ValueError(
+            "Scenario ID must be a valid UUID."
+        ) from exc
+
+    if str(parsed) != value.lower():
+        raise ValueError(
+            "Scenario ID must use canonical UUID format."
+        )
+
+    return str(parsed)
+
+
+def _require_dict(
+    value: Any,
+    field: str,
+) -> dict[str, Any]:
+    """Require a dictionary."""
+
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"{field} must be a dictionary."
+        )
+
+    return value
+
+
+def _require_list(
+    value: Any,
+    field: str,
+) -> list[Any]:
+    """Require a list."""
+
+    if not isinstance(value, list):
+        raise ValueError(
+            f"{field} must be a list."
+        )
+
+    return value
+
+
+def _require_string(
+    value: Any,
+    field: str,
+    allow_empty: bool = False,
+) -> str:
+    """Require a valid string."""
+
+    if not isinstance(value, str):
+        raise ValueError(
+            f"{field} must be a string."
+        )
+
+    if not allow_empty and not value.strip():
+        raise ValueError(
+            f"{field} must not be empty."
+        )
+
+    return value
+
+
+def _validate_scenario_metadata(
+    scenario: dict[str, Any],
+) -> None:
+    """Validate the complete scenario structure."""
+
+    metadata = _require_dict(
+        scenario.get("metadata", {}),
+        "metadata",
+    )
+
+    _require_dict(
+        metadata.get("provenance", {}),
+        "metadata.provenance",
+    )
+
+    for field in (
+        "origin",
+        "architecture",
+        "substrate",
+        "oversight_structure",
+        "core_capabilities",
+        "goals_and_behavior",
+        "impact_and_control",
+    ):
+        _require_dict(
+            scenario.get(field, {}),
+            field,
+        )
+
+    content = _require_dict(
+        scenario.get("scenario_content", {}),
+        "scenario_content",
+    )
+
+    narrative = content.get("narrative", "")
+
+    _require_string(
+        narrative,
+        "scenario_content.narrative",
+        allow_empty=True,
+    )
+
+    timeline_data = _require_dict(
+        content.get("timeline", {}),
+        "scenario_content.timeline",
+    )
+
+    phases = _require_list(
+        timeline_data.get("phases", []),
+        "scenario_content.timeline.phases",
+    )
+
+    for index, phase in enumerate(phases):
+
+        if not isinstance(phase, dict):
+            raise ValueError(
+                f"Timeline phase {index} must be a dictionary."
+            )
+
+        if "phase" not in phase or "years" not in phase:
+            raise ValueError(
+                f"Timeline phase {index} requires phase and years."
+            )
+
+    evidence = _require_dict(
+        scenario.get("observable_evidence", {}),
+        "observable_evidence",
+    )
+
+    _require_list(
+        evidence.get("supporting_signals", []),
+        "observable_evidence.supporting_signals",
+    )
+
+
+# ============================================================
+# DATABASE CONNECTION
+# ============================================================
+
 def _ensure_db_path() -> Path:
-    """Create the database directory if necessary."""
+    """Create the database directory when necessary."""
 
     db_path = Path(settings.db_path)
 
@@ -62,6 +260,7 @@ def get_conn() -> sqlite3.Connection:
     db_path = _ensure_db_path()
 
     try:
+
         conn = sqlite3.connect(
             str(db_path),
             timeout=30,
@@ -69,7 +268,13 @@ def get_conn() -> sqlite3.Connection:
 
         conn.row_factory = sqlite3.Row
 
-        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute(
+            "PRAGMA foreign_keys = ON"
+        )
+
+        conn.execute(
+            "PRAGMA busy_timeout = 30000"
+        )
 
         return conn
 
@@ -79,11 +284,14 @@ def get_conn() -> sqlite3.Connection:
         ) from exc
 
 
+# ============================================================
+# DATABASE INTROSPECTION
+# ============================================================
+
 def _table_exists(
     conn: sqlite3.Connection,
     table_name: str,
 ) -> bool:
-    """Check whether a table exists."""
 
     row = conn.execute(
         """
@@ -102,7 +310,8 @@ def _get_columns(
     conn: sqlite3.Connection,
     table_name: str,
 ) -> set[str]:
-    """Return existing table column names."""
+
+    table_name = _validate_table_name(table_name)
 
     rows = conn.execute(
         f"PRAGMA table_info({table_name})"
@@ -114,13 +323,32 @@ def _get_columns(
     }
 
 
+# ============================================================
+# DATABASE INITIALIZATION
+# ============================================================
+
 def init_table(table_name: str) -> None:
-    """Create or migrate a scenario table."""
+    """Create or migrate a scenario table transactionally."""
 
     table_name = _validate_table_name(table_name)
 
+    migrations = {
+        "title": "TEXT NOT NULL DEFAULT ''",
+        "params": "TEXT NOT NULL DEFAULT '{}'",
+        "narrative": "TEXT NOT NULL DEFAULT ''",
+        "timeline": "TEXT NOT NULL DEFAULT '[]'",
+        "model_used": "TEXT",
+        "signals": "TEXT NOT NULL DEFAULT '[]'",
+        "created_at": "TIMESTAMP",
+        "plausibility_index": "REAL DEFAULT 0.0",
+        "generation_origin": "TEXT DEFAULT 'SPECULATIVE'",
+        "scenario_data": "TEXT",
+    }
+
     try:
+
         with closing(get_conn()) as conn:
+
             with conn:
 
                 conn.execute(
@@ -133,11 +361,9 @@ def init_table(table_name: str) -> None:
                         timeline TEXT NOT NULL DEFAULT '[]',
                         model_used TEXT,
                         signals TEXT NOT NULL DEFAULT '[]',
-                        created_at TIMESTAMP
-                            DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         plausibility_index REAL DEFAULT 0.0,
-                        generation_origin TEXT
-                            DEFAULT 'SPECULATIVE',
+                        generation_origin TEXT DEFAULT 'SPECULATIVE',
                         scenario_data TEXT
                     )
                     """
@@ -147,21 +373,6 @@ def init_table(table_name: str) -> None:
                     conn,
                     table_name,
                 )
-
-                migrations = {
-                    "title": "TEXT NOT NULL DEFAULT ''",
-                    "params": "TEXT NOT NULL DEFAULT '{}'",
-                    "narrative": "TEXT NOT NULL DEFAULT ''",
-                    "timeline": "TEXT NOT NULL DEFAULT '[]'",
-                    "model_used": "TEXT",
-                    "signals": "TEXT NOT NULL DEFAULT '[]'",
-                    "created_at": "TIMESTAMP",
-                    "plausibility_index": "REAL DEFAULT 0.0",
-                    "generation_origin": (
-                        "TEXT DEFAULT 'SPECULATIVE'"
-                    ),
-                    "scenario_data": "TEXT",
-                }
 
                 for column, definition in migrations.items():
 
@@ -194,7 +405,7 @@ def init_table(table_name: str) -> None:
 
 
 def init_db() -> None:
-    """Initialize and migrate all application tables."""
+    """Initialize all application tables."""
 
     _ensure_db_path()
 
@@ -207,10 +418,15 @@ def init_db() -> None:
     )
 
 
+# ============================================================
+# SERIALIZATION
+# ============================================================
+
 def _serialize(value: Any) -> str:
     """Serialize data using strict JSON compliance."""
 
     try:
+
         return json.dumps(
             value,
             ensure_ascii=False,
@@ -223,6 +439,10 @@ def _serialize(value: Any) -> str:
         ) from exc
 
 
+# ============================================================
+# COMPLETE SCENARIO PERSISTENCE
+# ============================================================
+
 def save_asi_scenario(
     scenario: dict[str, Any],
     table_name: str = "s_scenarios",
@@ -230,35 +450,30 @@ def save_asi_scenario(
     """
     Persist a complete scenario.
 
-    The complete JSON object is authoritative.
+    scenario_data remains authoritative.
     Legacy columns remain available for compatibility.
     """
 
     table_name = _validate_table_name(table_name)
 
-    if not isinstance(scenario, dict):
-        raise TypeError(
-            "Scenario must be a dictionary."
-        )
+    scenario = _require_dict(
+        scenario,
+        "scenario",
+    )
 
-    scenario_id = scenario.get("id")
-    title = scenario.get("title")
+    scenario_id = _validate_uuid(
+        scenario.get("id")
+    )
 
-    if not isinstance(scenario_id, str) or not scenario_id:
-        raise ValueError("Scenario ID is required.")
+    title = _require_string(
+        scenario.get("title"),
+        "title",
+    )
 
-    try:
-        uuid.UUID(scenario_id)
-    except ValueError as exc:
-        raise ValueError(
-            "Scenario ID must be a valid UUID."
-        ) from exc
+    _validate_scenario_metadata(scenario)
 
-    if not isinstance(title, str) or not title.strip():
-        raise ValueError("Scenario title is required.")
-
-    metadata = scenario.get("metadata", {})
-    provenance = metadata.get("provenance", {})
+    metadata = scenario["metadata"]
+    provenance = metadata["provenance"]
 
     params = {
         "origin": scenario.get("origin", {}),
@@ -278,14 +493,11 @@ def save_asi_scenario(
         ),
     }
 
-    content = scenario.get("scenario_content", {})
+    content = scenario["scenario_content"]
 
-    narrative = content.get("narrative", "")
+    narrative = content["narrative"]
 
-    timeline = content.get("timeline", {}).get(
-        "phases",
-        [],
-    )
+    timeline = content["timeline"]["phases"]
 
     signals = scenario.get(
         "observable_evidence",
@@ -299,6 +511,13 @@ def save_asi_scenario(
         "model_used",
         "unknown",
     )
+
+    if model_used is not None:
+        _require_string(
+            model_used,
+            "model_used",
+            allow_empty=True,
+        )
 
     generation_origin = str(
         metadata.get("source", "generated")
@@ -342,8 +561,15 @@ def save_asi_scenario(
     try:
 
         with closing(get_conn()) as conn:
+
             with conn:
                 conn.execute(sql, values)
+
+    except sqlite3.IntegrityError as exc:
+
+        raise DuplicateScenarioError(
+            f"Scenario already exists: {scenario_id}"
+        ) from exc
 
     except sqlite3.Error as exc:
 
@@ -367,6 +593,10 @@ def save_asi_scenario(
     return scenario_id
 
 
+# ============================================================
+# LEGACY PERSISTENCE INTERFACE
+# ============================================================
+
 def save_scenario(
     table_name: str,
     *,
@@ -383,21 +613,31 @@ def save_scenario(
 
     table_name = _validate_table_name(table_name)
 
-    init_table(table_name)
+    title = _require_string(title, "title")
+    narrative = _require_string(narrative, "narrative")
 
-    if not isinstance(title, str) or not title.strip():
-        raise ValueError("Invalid scenario title.")
+    _require_dict(params, "params")
+    _require_list(timeline, "timeline")
 
-    if not isinstance(narrative, str) or not narrative.strip():
-        raise ValueError("Invalid scenario narrative.")
+    if signals is not None:
+        _require_list(signals, "signals")
 
-    if not isinstance(params, dict):
-        raise TypeError("params must be a dictionary.")
+    if model_used is not None:
+        _require_string(
+            model_used,
+            "model_used",
+            allow_empty=True,
+        )
 
-    if not isinstance(timeline, list):
-        raise TypeError("timeline must be a list.")
+    generation_origin = _require_string(
+        generation_origin,
+        "generation_origin",
+    )
 
-    scenario_id = scenario_id or str(uuid.uuid4())
+    if scenario_id is None:
+        scenario_id = str(uuid.uuid4())
+    else:
+        scenario_id = _validate_uuid(scenario_id)
 
     values = (
         scenario_id,
@@ -410,9 +650,12 @@ def save_scenario(
         generation_origin,
     )
 
+    init_table(table_name)
+
     try:
 
         with closing(get_conn()) as conn:
+
             with conn:
 
                 conn.execute(
@@ -432,6 +675,12 @@ def save_scenario(
                     """,
                     values,
                 )
+
+    except sqlite3.IntegrityError as exc:
+
+        raise DuplicateScenarioError(
+            f"Scenario already exists: {scenario_id}"
+        ) from exc
 
     except sqlite3.Error as exc:
 
@@ -490,6 +739,81 @@ def save_scenario_ev(
     )
 
 
+# ============================================================
+# STRUCTURED QUERY HELPERS
+# ============================================================
+
+def _build_where(
+    filters: dict[str, tuple[str, Any]] | None,
+) -> tuple[str, tuple[Any, ...]]:
+    """Build a safe parameterized WHERE clause."""
+
+    if filters is None or not filters:
+        return "1=1", ()
+
+    if not isinstance(filters, dict):
+        raise TypeError(
+            "Filters must be a dictionary."
+        )
+
+    clauses = []
+    values = []
+
+    for column, condition in filters.items():
+
+        if (
+            not isinstance(column, str)
+            or not COLUMN_PATTERN.fullmatch(column)
+            or column not in ALLOWED_COLUMNS
+        ):
+            raise ValueError(
+                f"Unsupported column: {column!r}"
+            )
+
+        if (
+            not isinstance(condition, tuple)
+            or len(condition) != 2
+        ):
+            raise ValueError(
+                f"Invalid filter for {column}."
+            )
+
+        operator, value = condition
+
+        if operator not in ALLOWED_OPERATORS:
+            raise ValueError(
+                f"Unsupported operator: {operator}"
+            )
+
+        if value is None:
+            if operator == "=":
+                clauses.append(f"{column} IS NULL")
+                continue
+
+            if operator == "!=":
+                clauses.append(f"{column} IS NOT NULL")
+                continue
+
+            raise ValueError(
+                "NULL supports only equality operators."
+            )
+
+        clauses.append(
+            f"{column} {operator} ?"
+        )
+
+        values.append(value)
+
+    return (
+        " AND ".join(clauses),
+        tuple(values),
+    )
+
+
+# ============================================================
+# STORAGE WRAPPER
+# ============================================================
+
 class Storage:
     """Convenience wrapper for database operations."""
 
@@ -503,17 +827,37 @@ class Storage:
         condition: str = "1=1",
         parameters: tuple[Any, ...] = (),
     ) -> list[dict[str, Any]]:
-        """Retrieve rows using a trusted SQL condition."""
+        """
+        Retrieve rows using a trusted internal SQL condition.
+
+        IMPORTANT:
+        Never pass user-controlled SQL through condition.
+        Use get_rows_by_filters() for external input.
+        """
 
         table_name = _validate_table_name(table_name)
 
+        if not isinstance(condition, str) or not condition.strip():
+            raise ValueError(
+                "SQL condition must be a nonempty string."
+            )
+
+        if not isinstance(parameters, tuple):
+            raise TypeError(
+                "SQL parameters must be a tuple."
+            )
+
         if columns:
+
             if any(
                 not isinstance(column, str)
-                or not column.replace("_", "").isalnum()
+                or not COLUMN_PATTERN.fullmatch(column)
+                or column not in ALLOWED_COLUMNS
                 for column in columns
             ):
-                raise ValueError("Invalid column identifier.")
+                raise ValueError(
+                    "Invalid column identifier."
+                )
 
             column_list = ", ".join(columns)
 
@@ -545,14 +889,83 @@ class Storage:
                 f"Unable to retrieve scenarios: {exc}"
             ) from exc
 
+    def get_rows_by_filters(
+        self,
+        table_name: str,
+        filters: dict[str, tuple[str, Any]] | None = None,
+        columns: Optional[list[str]] = None,
+    ) -> list[dict[str, Any]]:
+        """Retrieve records using safe structured filters."""
+
+        table_name = _validate_table_name(table_name)
+
+        if columns:
+
+            if any(
+                not isinstance(column, str)
+                or not COLUMN_PATTERN.fullmatch(column)
+                or column not in ALLOWED_COLUMNS
+                for column in columns
+            ):
+                raise ValueError(
+                    "Invalid column identifier."
+                )
+
+            column_list = ", ".join(columns)
+
+        else:
+            column_list = "*"
+
+        where, parameters = _build_where(filters)
+
+        sql = (
+            f"SELECT {column_list} FROM {table_name} "
+            f"WHERE {where}"
+        )
+
+        try:
+
+            with closing(get_conn()) as conn:
+
+                rows = conn.execute(
+                    sql,
+                    parameters,
+                ).fetchall()
+
+                return [
+                    dict(row)
+                    for row in rows
+                ]
+
+        except sqlite3.Error as exc:
+
+            raise StorageError(
+                f"Unable to retrieve scenarios: {exc}"
+            ) from exc
+
     def delete_rows(
         self,
         table_name: str,
         condition: str = "0=1",
         parameters: tuple[Any, ...] = (),
     ) -> int:
+        """
+        Delete using a trusted internal SQL condition.
+
+        Never pass user-controlled SQL through condition.
+        """
 
         table_name = _validate_table_name(table_name)
+
+        if not isinstance(condition, str) or not condition.strip():
+            raise ValueError(
+                "SQL condition must be a nonempty string."
+            )
+
+        if not isinstance(parameters, tuple):
+            raise TypeError(
+                "SQL parameters must be a tuple."
+            )
 
         if condition.strip() == "1=1":
             log.warning(
@@ -564,10 +977,48 @@ class Storage:
         try:
 
             with closing(get_conn()) as conn:
+
                 with conn:
 
                     cursor = conn.execute(
-                        f"DELETE FROM {table_name} WHERE {condition}",
+                        f"DELETE FROM {table_name} "
+                        f"WHERE {condition}",
+                        parameters,
+                    )
+
+                    return cursor.rowcount
+
+        except sqlite3.Error as exc:
+
+            raise StorageError(
+                f"Unable to delete scenarios: {exc}"
+            ) from exc
+
+    def delete_rows_by_filters(
+        self,
+        table_name: str,
+        filters: dict[str, tuple[str, Any]],
+    ) -> int:
+        """Delete records using safe structured filters."""
+
+        table_name = _validate_table_name(table_name)
+
+        if not filters:
+            raise ValueError(
+                "Deletion requires at least one filter."
+            )
+
+        where, parameters = _build_where(filters)
+
+        try:
+
+            with closing(get_conn()) as conn:
+
+                with conn:
+
+                    cursor = conn.execute(
+                        f"DELETE FROM {table_name} "
+                        f"WHERE {where}",
                         parameters,
                     )
 
@@ -580,14 +1031,21 @@ class Storage:
             ) from exc
 
 
+# ============================================================
+# PUBLIC DATABASE HELPERS
+# ============================================================
+
 def get_scenarios_from_db(
     table_name: str,
 ) -> list[dict[str, Any]]:
 
-    return Storage().get_rows_by_condition(table_name)
+    return Storage().get_rows_by_condition(
+        table_name
+    )
 
 
 def get_next_ev_scenario_number() -> int:
+    """Return the next evidence scenario number."""
 
     init_table("ev_scenarios")
 
@@ -612,6 +1070,9 @@ def update_scenario_index(
     scenario_id: str,
     plausibility_index: float,
 ) -> None:
+    """Update the plausibility index of an EV scenario."""
+
+    scenario_id = _validate_uuid(scenario_id)
 
     if (
         isinstance(plausibility_index, bool)
@@ -620,7 +1081,8 @@ def update_scenario_index(
         or not 0.0 <= plausibility_index <= 1.0
     ):
         raise ValueError(
-            "Plausibility index must be between 0 and 1."
+            "Plausibility index must be a finite number "
+            "between 0 and 1."
         )
 
     init_table("ev_scenarios")
@@ -628,6 +1090,7 @@ def update_scenario_index(
     try:
 
         with closing(get_conn()) as conn:
+
             with conn:
 
                 cursor = conn.execute(
@@ -636,7 +1099,10 @@ def update_scenario_index(
                     SET plausibility_index = ?
                     WHERE id = ?
                     """,
-                    (plausibility_index, scenario_id),
+                    (
+                        float(plausibility_index),
+                        scenario_id,
+                    ),
                 )
 
                 if cursor.rowcount == 0:
