@@ -105,7 +105,7 @@ def create_pdf_report():
             ax.axis('off')
             now = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
 
-            title = "ECO Emergence Observatory Report"
+            title = "OASIOS Emergence Observatory Report"
             ax.text(0.5, 0.95, title, ha='center', va='center', fontsize=18, fontweight='bold')
             ax.text(0.5, 0.90, f"Generated: {now}", ha='center', va='center', fontsize=10)
 

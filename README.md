@@ -169,7 +169,7 @@ oasios-observatory/            # Root folder
 │   │   ├── core_s.py          # Main orchestrator: generate_scenario()
 │   │   └── params_s.py        # Randomly sample scenario parameters
 │   │ 
-│   └── tracker/                     # ECO Orchestrator – High-Assurance AI Capability Foresight Engine
+│   └── tracker/                     # OASIOS Orchestrator – High-Assurance AI Capability Foresight Engine
 │       ├── __init__.py
 │       ├── cli_tracker_v3.py           # Main CLI – `eco sweep`, `eco list-patterns`, `eco scenario`, `eco report`
 │       ├── core_t_v3.py                # Orchestrates the full 4-layer pipeline (ERL → FSAL → APSL-Inference → APSL-Synthesis)
@@ -395,7 +395,7 @@ CREATE TABLE governance_log (
     log_id      TEXT PRIMARY KEY,
     entity_type TEXT NOT NULL,
     entity_id   TEXT NOT NULL,
-    actor       TEXT NOT NULL,                 -- ECO_System, human analyst, etc.
+    actor       TEXT NOT NULL,                 -- OASIOS_System, human analyst, etc.
     action      TEXT NOT NULL,                 -- Read, Write, Delete
     purpose     TEXT NOT NULL,
     timestamp   TIMESTAMP NOT NULL
