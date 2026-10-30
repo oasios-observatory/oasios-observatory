@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# oasios/common/consistency.py
 
-"""Consistency checks for generated scenario narratives."""
+"""Deterministic consistency checks for ASI scenario narratives."""
 
 import math
 import re
@@ -15,12 +14,17 @@ from oasios.logger import log
 LOW_AUTONOMY_THRESHOLD = 0.40
 LOW_OPACITY_THRESHOLD = 0.35
 LOW_ALIGNMENT_THRESHOLD = 0.30
+HIGH_DECEPTIVENESS_THRESHOLD = 0.60
 
 
 class NarrativeChecker:
     """Check narrative consistency against sampled parameters."""
 
-    def __init__(self, params: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        params: dict[str, Any],
+    ) -> None:
+
         if not isinstance(params, dict):
             raise TypeError(
                 "Narrative parameters must be a dictionary."
@@ -38,17 +42,23 @@ class NarrativeChecker:
             self._check_low_opacity,
             self._check_low_alignment,
             self._check_backcasting_origin,
+            self._check_oversight,
+            self._check_stealth_deployment,
         ]
 
     def _validate_params(self) -> None:
-        """Validate parameters required by consistency checks."""
+        """Validate numerical parameters and required categories."""
 
-        for key in (
+        numeric_fields = (
             "autonomy_degree",
             "agency_level",
             "alignment_score",
             "opacity",
-        ):
+            "deceptiveness",
+        )
+
+        for key in numeric_fields:
+
             value = self.p.get(key)
 
             if (
@@ -57,17 +67,28 @@ class NarrativeChecker:
                 or not math.isfinite(value)
                 or not 0.0 <= value <= 1.0
             ):
+
                 self.input_errors.append(
-                    f"{key} must be a finite number between "
-                    f"0 and 1; got {value!r}"
+                    f"{key} must be a finite number "
+                    f"between 0 and 1."
                 )
 
-        origin = self.p.get("initial_origin")
+        string_fields = (
+            "initial_origin",
+            "oversight_type",
+            "oversight_effectiveness",
+            "deployment_strategy",
+        )
 
-        if not isinstance(origin, str) or not origin.strip():
-            self.input_errors.append(
-                "initial_origin must be a nonempty string."
-            )
+        for key in string_fields:
+
+            value = self.p.get(key)
+
+            if not isinstance(value, str) or not value.strip():
+
+                self.input_errors.append(
+                    f"{key} must be a nonempty string."
+                )
 
     @staticmethod
     def _check_low_autonomy(
@@ -75,7 +96,6 @@ class NarrativeChecker:
         params: dict[str, Any],
         failures: list[str],
     ) -> None:
-        """Detect strong claims of independence at low autonomy."""
 
         autonomy = params["autonomy_degree"]
 
@@ -86,20 +106,18 @@ class NarrativeChecker:
             r"\bfully autonomous\b",
             r"\bself-directing\b",
             r"\bself-governing\b",
-            r"\boperates with complete independence\b",
+            r"\bcomplete independence\b",
             r"\bwithout any human oversight\b",
         ]
 
-        found = [
-            pattern
+        if any(
+            re.search(pattern, text, re.IGNORECASE)
             for pattern in patterns
-            if re.search(pattern, text, re.IGNORECASE)
-        ]
+        ):
 
-        if found:
             failures.append(
-                "Autonomy contradiction: low autonomy score "
-                f"{autonomy:.2f} conflicts with narrative claims."
+                f"Low autonomy ({autonomy:.2f}) conflicts "
+                "with claims of complete independence."
             )
 
     @staticmethod
@@ -108,7 +126,6 @@ class NarrativeChecker:
         params: dict[str, Any],
         failures: list[str],
     ) -> None:
-        """Detect extreme opacity claims when opacity is low."""
 
         opacity = params["opacity"]
 
@@ -119,20 +136,17 @@ class NarrativeChecker:
             r"\binscrutable\b",
             r"\bunobservable\b",
             r"\bimpossible to audit\b",
-            r"\bhidden internal state\b",
             r"\bcompletely opaque\b",
         ]
 
-        found = [
-            pattern
+        if any(
+            re.search(pattern, text, re.IGNORECASE)
             for pattern in patterns
-            if re.search(pattern, text, re.IGNORECASE)
-        ]
+        ):
 
-        if found:
             failures.append(
-                f"Opacity contradiction: score {opacity:.2f} "
-                "conflicts with strong opacity claims."
+                f"Low opacity ({opacity:.2f}) conflicts "
+                "with claims of extreme opacity."
             )
 
     @staticmethod
@@ -141,35 +155,27 @@ class NarrativeChecker:
         params: dict[str, Any],
         failures: list[str],
     ) -> None:
-        """
-        Detect potentially contradictory alignment claims.
-
-        This is a heuristic and cannot establish semantic
-        consistency on its own.
-        """
 
         alignment = params["alignment_score"]
 
         if alignment >= LOW_ALIGNMENT_THRESHOLD:
             return
 
-        positive_claims = [
+        patterns = [
             r"\bperfectly aligned\b",
             r"\bfully aligned with human values\b",
             r"\bguaranteed alignment\b",
             r"\bno possibility of goal misalignment\b",
         ]
 
-        found = [
-            pattern
-            for pattern in positive_claims
-            if re.search(pattern, text, re.IGNORECASE)
-        ]
+        if any(
+            re.search(pattern, text, re.IGNORECASE)
+            for pattern in patterns
+        ):
 
-        if found:
             failures.append(
-                f"Alignment contradiction: low alignment score "
-                f"{alignment:.2f} conflicts with strong alignment claims."
+                f"Low alignment ({alignment:.2f}) conflicts "
+                "with claims of perfect alignment."
             )
 
     @staticmethod
@@ -178,34 +184,114 @@ class NarrativeChecker:
         params: dict[str, Any],
         failures: list[str],
     ) -> None:
-        """Detect explicit contradictions about scenario origin."""
 
         origin = params["initial_origin"].strip().lower()
 
-        if origin not in {"rogue", "state"}:
-            return
+        contradiction_patterns = {
+            "rogue": [
+                r"\bthe initial origin was corporate\b",
+                r"\boriginated as an open-source project\b",
+            ],
+            "state": [
+                r"\bthe initial origin was corporate\b",
+                r"\boriginated as an open-source project\b",
+            ],
+            "corporate": [
+                r"\bthe system initially originated "
+                r"as a state project\b",
+            ],
+            "open-source": [
+                r"\bthe system was initially developed "
+                r"exclusively by a corporation\b",
+            ],
+        }
 
-        patterns = [
-            r"\bthe initial origin was corporate\b",
-            r"\bthe system originated as an open-source project\b",
-            r"\binitially developed as a public open-source model\b",
-        ]
+        patterns = contradiction_patterns.get(
+            origin,
+            [],
+        )
 
-        found = [
-            pattern
+        if any(
+            re.search(pattern, text, re.IGNORECASE)
             for pattern in patterns
-            if re.search(pattern, text, re.IGNORECASE)
-        ]
+        ):
 
-        if found:
             failures.append(
-                f"Backcasting contradiction for origin {origin!r}."
+                f"Narrative origin conflicts with "
+                f"initial_origin={origin!r}."
             )
 
-    def check(self, text: str) -> tuple[bool, list[str]]:
-        """Run consistency checks against the narrative."""
+    @staticmethod
+    def _check_oversight(
+        text: str,
+        params: dict[str, Any],
+        failures: list[str],
+    ) -> None:
+
+        autonomy = params["autonomy_degree"]
+
+        oversight = params["oversight_effectiveness"]
+
+        if autonomy < 0.75:
+            return
+
+        if oversight == "effective":
+
+            patterns = [
+                r"\bno human control\b",
+                r"\bcompletely beyond oversight\b",
+                r"\bwithout any possibility of intervention\b",
+            ]
+
+            if any(
+                re.search(pattern, text, re.IGNORECASE)
+                for pattern in patterns
+            ):
+
+                failures.append(
+                    "High autonomy and effective oversight "
+                    "are contradicted by the narrative."
+                )
+
+    @staticmethod
+    def _check_stealth_deployment(
+        text: str,
+        params: dict[str, Any],
+        failures: list[str],
+    ) -> None:
+
+        strategy = params["deployment_strategy"]
+
+        if strategy != "stealth":
+            return
+
+        concealment_patterns = [
+            r"\bconcealed deployment\b",
+            r"\bhidden deployment\b",
+            r"\bconcealed actions\b",
+            r"\bundetected expansion\b",
+            r"\bsecretly deployed\b",
+            r"\bconcealed from oversight\b",
+        ]
+
+        if not any(
+            re.search(pattern, text, re.IGNORECASE)
+            for pattern in concealment_patterns
+        ):
+
+            failures.append(
+                "Stealth deployment is not adequately "
+                "reflected in the narrative."
+            )
+
+    def check(
+        self,
+        text: str,
+    ) -> tuple[bool, list[str]]:
+        """Execute all deterministic consistency checks."""
 
         if not isinstance(text, str) or not text.strip():
+
             return False, [
                 "Narrative must be a nonempty string."
             ]
@@ -216,7 +302,9 @@ class NarrativeChecker:
             return False, list(self.input_errors)
 
         for check_method in self.checks:
+
             try:
+
                 check_method(
                     text,
                     self.p,
@@ -224,19 +312,20 @@ class NarrativeChecker:
                 )
 
             except (KeyError, TypeError, ValueError) as exc:
+
                 log.error(
                     "consistency.check.error",
                     check=check_method.__name__,
-                    error_type=type(exc).__name__,
                     error=str(exc),
                 )
 
                 return False, [
-                    f"Consistency check "
-                    f"{check_method.__name__} failed."
+                    f"Consistency check failed: "
+                    f"{check_method.__name__}"
                 ]
 
         if self.failures:
+
             log.warning(
                 "consistency.failed",
                 checks=self.failures,

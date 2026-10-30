@@ -28,11 +28,16 @@ def sample_parameters() -> dict[str, Any]:
     # ---------------------------------------------------------
 
     initial_origin = random.choice([
-        "corporate",
-        "open-source",
-        "state",
-        "rogue",
-    ])
+            "corporate",
+            "open-source",
+            "state",
+            "military",
+            "academic",
+            "rogue",
+            "individual",
+            "accidental",
+        ]
+    )
 
     development_dynamics = random.choice([
         "engineered",
@@ -57,32 +62,47 @@ def sample_parameters() -> dict[str, Any]:
         deployment_topology = "centralized"
 
     elif architecture in {"swarm", "decentralized"}:
-        deployment_topology = random.choice([
-            "decentralized",
-            "edge",
-        ])
+        deployment_topology = random.choice(
+            [
+                "decentralized",
+                "distributed",
+                "edge",
+            ]
+        )
 
     else:
-        deployment_topology = random.choice([
-            "centralized",
-            "edge",
-            "decentralized",
-        ])
+        deployment_topology = random.choice(
+            [
+                "centralized",
+                "edge",
+                "decentralized",
+                "distributed",
+                "hybrid",
+            ]
+        )
 
     # ---------------------------------------------------------
     # SUBSTRATE
     # ---------------------------------------------------------
 
-    substrate = random.choice([
-        "classical",
-        "neuromorphic",
-        "quantum",
-    ])
+    substrate = random.choice(
+        [
+            "classical",
+            "neuromorphic",
+            "quantum",
+            "biological",
+            "hybrid",
+            "unknown",
+        ]
+    )
 
-    substrate_resilience = (
-        "adaptive"
-        if substrate == "quantum"
-        else random.choice(["robust", "adaptive"])
+    substrate_resilience = random.choice(
+        [
+            "robust",
+            "fragile",
+            "adaptive",
+            "unknown",
+        ]
     )
 
     deployment_medium = random.choice([
@@ -284,12 +304,21 @@ def sample_parameters() -> dict[str, Any]:
     # ---------------------------------------------------------
 
     if deceptiveness > 0.6:
-        deployment_strategy = "stealth"
+        deployment_strategy = random.choices(
+            ["stealth", "gradual", "rapid"],
+            weights=[0.7, 0.2, 0.1],
+            k=1,
+        )[0]
+
     else:
-        deployment_strategy = random.choice([
-            "public",
-            "gradual",
-        ])
+        deployment_strategy = random.choice(
+            [
+                "public",
+                "gradual",
+                "rapid",
+                "containment",
+            ]
+        )
 
     # ---------------------------------------------------------
     # RETURN PARAMETERS

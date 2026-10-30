@@ -1,56 +1,48 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# oasios/s_generator/abbreviator_s.py
-"""
-Created on Sat Nov  8 16:14:53 2025
 
-@author: mike
-"""
-import sqlite3
-from oasios.config import settings
-from pathlib import Path
+"""Generate compact identifiers for speculative ASI scenarios."""
 
-db_path = Path(settings.db_path)
+from typing import Any
 
-def _ensure_table():
-    """Create table if missing — runs every time, 100% safe."""
-    conn = sqlite3.connect(db_path)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS s_scenarios (
-            id TEXT PRIMARY KEY,
-            params TEXT,
-            narrative TEXT,
-            timeline TEXT,
-            model_used TEXT,
-            signals TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-    conn.commit()
-    conn.close()
-
-def get_next_scenario_number() -> int:
-    """Return next number (001, 002…) — auto-creates DB + table."""
-    _ensure_table()
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM s_scenarios")
-    count = cursor.fetchone()[0]
-    conn.close()
-    return count + 1
 
 def short_code(value: str) -> str:
-    return "".join(word[0].upper() for word in value.replace("-", " ").split())[:3] or "UNK"
+    """Convert a categorical value into a short uppercase code."""
 
-def abbreviate(core: dict) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return "UNK"
+
+    words = value.replace("-", " ").replace("_", " ").split()
+
+    return "".join(
+        word[0].upper()
+        for word in words
+    )[:3] or "UNK"
+
+
+def abbreviate(core: dict[str, Any]) -> str:
+    """
+    Generate a deterministic scenario title.
+
+    The title is independent of database state.
+    """
+
+    if not isinstance(core, dict):
+        raise TypeError("Scenario parameters must be a dictionary.")
+
+    fields = (
+        "initial_origin",
+        "development_dynamics",
+        "architecture",
+        "deployment_topology",
+        "oversight_type",
+        "oversight_effectiveness",
+        "substrate",
+    )
+
     parts = [
-        short_code(core.get("initial_origin", "UNK")),
-        short_code(core.get("development_dynamics", "UNK")),
-        short_code(core.get("architecture", "UNK")),
-        short_code(core.get("deployment_topology", "UNK")),
-        short_code(core.get("oversight_type", "UNK")),
-        short_code(core.get("oversight_effectiveness", "UNK")),
-        short_code(core.get("substrate", "UNK")),
+        short_code(core.get(field, "UNK"))
+        for field in fields
     ]
-    num = get_next_scenario_number()
-    return f"{'-'.join(parts)}-{num:03d}"
+
+    return "-".join(parts)

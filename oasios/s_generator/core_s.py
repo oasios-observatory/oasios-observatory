@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# oasios/s_generaotr/core_s.py
 
-"""Core logic for generating speculative ASI scenarios."""
+"""Core pipeline for speculative ASI scenario generation."""
 
 import uuid
 
@@ -11,28 +10,66 @@ from typing import Any
 
 from oasios.common.consistency import NarrativeChecker
 from oasios.common.schema import SchemaManager
-from oasios.common.storage import init_db, save_scenario
-from oasios.logger import log
-from oasios.s_generator.abbreviator_s import abbreviate
+from oasios.common.storage import (
+    init_db,
+    save_asi_scenario,
+)
 from oasios.common.llm_client import generate_narrative
-from oasios.s_generator.params_s import sample_parameters
 from oasios.common.timeline import generate_scenario_timeline
+from oasios.logger import log
+
+from oasios.s_generator.abbreviator_s import abbreviate
+from oasios.s_generator.params_s import sample_parameters
 
 
 class ScenarioGenerationError(RuntimeError):
-    """Raised when a scenario-generation stage fails unexpectedly."""
+    """Raised when a generation pipeline stage fails."""
 
     def __init__(self, stage: str, message: str) -> None:
         super().__init__(message)
         self.stage = stage
 
 
-def _run_stage(stage: str, operation, scenario_id: str | None = None):
-    """Execute a pipeline operation with stage-specific error reporting."""
+REQUIRED_PARAMETERS = {
+    "initial_origin",
+    "development_dynamics",
+    "architecture",
+    "deployment_topology",
+    "substrate",
+    "deployment_medium",
+    "substrate_resilience",
+    "oversight_type",
+    "oversight_effectiveness",
+    "control_surface",
+    "agency_level",
+    "agency_level_confidence",
+    "autonomy_degree",
+    "autonomy_degree_confidence",
+    "alignment_score",
+    "alignment_score_confidence",
+    "phenomenology_proxy_score",
+    "stated_goal",
+    "mesa_goals",
+    "opacity",
+    "deceptiveness",
+    "goal_stability",
+    "impact_domains",
+    "deployment_strategy",
+}
+
+
+def _run_stage(
+    stage: str,
+    operation,
+    scenario_id: str | None = None,
+):
+    """Execute a pipeline operation with error reporting."""
+
     try:
         return operation()
 
     except Exception as exc:
+
         log.error(
             "scenario.stage.failed",
             stage=stage,
@@ -43,8 +80,54 @@ def _run_stage(stage: str, operation, scenario_id: str | None = None):
 
         raise ScenarioGenerationError(
             stage,
-            f"Scenario generation failed during {stage}.",
+            f"Scenario generation failed during {stage}: {exc}",
         ) from exc
+
+
+def _validate_parameters(
+    params: dict[str, Any],
+) -> None:
+    """Validate the sampled parameter structure."""
+
+    if not isinstance(params, dict):
+        raise ScenarioGenerationError(
+            "parameter_sampling",
+            "Parameter sampler must return a dictionary.",
+        )
+
+    missing = REQUIRED_PARAMETERS - params.keys()
+
+    if missing:
+        raise ScenarioGenerationError(
+            "parameter_validation",
+            f"Missing parameters: {sorted(missing)}",
+        )
+
+    numeric_parameters = (
+        "agency_level",
+        "agency_level_confidence",
+        "autonomy_degree",
+        "autonomy_degree_confidence",
+        "alignment_score",
+        "alignment_score_confidence",
+        "phenomenology_proxy_score",
+        "opacity",
+        "deceptiveness",
+    )
+
+    for key in numeric_parameters:
+
+        value = params[key]
+
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not 0.0 <= value <= 1.0
+        ):
+            raise ScenarioGenerationError(
+                "parameter_validation",
+                f"Invalid numeric parameter: {key}",
+            )
 
 
 def generate_scenario() -> dict[str, Any] | None:
@@ -52,12 +135,14 @@ def generate_scenario() -> dict[str, Any] | None:
     Generate, validate, and persist one scenario.
 
     Returns:
-        A validated and persisted scenario, or None if generation is
-        rejected by the narrative or consistency checks.
+        Complete scenario dictionary on success.
+        None when a scenario fails quality or schema validation.
 
     Raises:
-        ScenarioGenerationError: If a pipeline stage fails unexpectedly.
+        ScenarioGenerationError:
+            When an operational pipeline stage fails.
     """
+
     scenario_id = str(uuid.uuid4())
 
     log.info(
@@ -65,7 +150,19 @@ def generate_scenario() -> dict[str, Any] | None:
         scenario_id=scenario_id,
     )
 
-    _run_stage("storage_initialization", init_db, scenario_id)
+    # ---------------------------------------------------------
+    # 1. DATABASE INITIALIZATION
+    # ---------------------------------------------------------
+
+    _run_stage(
+        "storage_initialization",
+        init_db,
+        scenario_id,
+    )
+
+    # ---------------------------------------------------------
+    # 2. PARAMETER SAMPLING
+    # ---------------------------------------------------------
 
     params = _run_stage(
         "parameter_sampling",
@@ -73,17 +170,17 @@ def generate_scenario() -> dict[str, Any] | None:
         scenario_id,
     )
 
-    if not isinstance(params, dict):
-        raise ScenarioGenerationError(
-            "parameter_sampling",
-            "Parameter sampler did not return a dictionary.",
-        )
+    _validate_parameters(params)
 
     log.debug(
         "scenario.parameters.sampled",
         scenario_id=scenario_id,
         count=len(params),
     )
+
+    # ---------------------------------------------------------
+    # 3. TITLE GENERATION
+    # ---------------------------------------------------------
 
     title = _run_stage(
         "title_generation",
@@ -92,10 +189,15 @@ def generate_scenario() -> dict[str, Any] | None:
     )
 
     if not isinstance(title, str) or not title.strip():
+
         raise ScenarioGenerationError(
             "title_generation",
-            "Title generator returned an empty or invalid title.",
+            "Invalid scenario title.",
         )
+
+    # ---------------------------------------------------------
+    # 4. TIMELINE GENERATION
+    # ---------------------------------------------------------
 
     timeline_phases = _run_stage(
         "timeline_generation",
@@ -108,12 +210,15 @@ def generate_scenario() -> dict[str, Any] | None:
     )
 
     if not isinstance(timeline_phases, list) or not timeline_phases:
+
         raise ScenarioGenerationError(
             "timeline_generation",
-            "Timeline generator returned an empty or invalid timeline.",
+            "Timeline generator returned an invalid timeline.",
         )
 
-    now = datetime.now(timezone.utc).isoformat()
+    # ---------------------------------------------------------
+    # 5. NARRATIVE GENERATION
+    # ---------------------------------------------------------
 
     success, narrative, model_used = _run_stage(
         "narrative_generation",
@@ -126,20 +231,25 @@ def generate_scenario() -> dict[str, Any] | None:
     )
 
     if not success:
-        log.warning(
-            "scenario.narrative_generation.rejected",
-            scenario_id=scenario_id,
-            reason=str(narrative)[:300],
+
+        raise ScenarioGenerationError(
+            "narrative_generation",
+            str(narrative),
         )
-        return None
 
     if not isinstance(narrative, str) or not narrative.strip():
+
         log.warning(
             "scenario.narrative_generation.rejected",
             scenario_id=scenario_id,
             reason="empty_narrative",
         )
+
         return None
+
+    # ---------------------------------------------------------
+    # 6. CONSISTENCY CHECK
+    # ---------------------------------------------------------
 
     checker = _run_stage(
         "consistency_checker_initialization",
@@ -154,73 +264,113 @@ def generate_scenario() -> dict[str, Any] | None:
     )
 
     if not consistent:
+
         log.warning(
             "scenario.consistency_check.rejected",
             scenario_id=scenario_id,
             failures=failures,
         )
+
         return None
 
+    # ---------------------------------------------------------
+    # 7. BUILD COMPLETE SCENARIO
+    # ---------------------------------------------------------
+
+    now = datetime.now(timezone.utc).isoformat()
+
     scenario: dict[str, Any] = {
+
         "id": scenario_id,
+
         "title": title,
+
         "metadata": {
             "created": now,
             "last_updated": now,
             "version": 1,
             "source": "generated",
+
             "provenance": {
                 "model_used": model_used or "unknown",
+
                 "generation_parameters": {
-                    "temperature": 0.7,
-                    "top_p": 0.9,
                     "prompt_version": "v1",
                 },
             },
         },
+
         "origin": {
             "initial_origin": params["initial_origin"],
-            "development_dynamics": params["development_dynamics"],
+            "development_dynamics": (
+                params["development_dynamics"]
+            ),
         },
+
         "architecture": {
             "type": params["architecture"],
-            "deployment_topology": params["deployment_topology"],
+            "deployment_topology": (
+                params["deployment_topology"]
+            ),
         },
+
         "substrate": {
             "type": params["substrate"],
-            "deployment_medium": params["deployment_medium"],
+            "deployment_medium": (
+                params["deployment_medium"]
+            ),
             "resilience": params["substrate_resilience"],
         },
+
         "oversight_structure": {
             "type": params["oversight_type"],
-            "effectiveness": params["oversight_effectiveness"],
+            "effectiveness": (
+                params["oversight_effectiveness"]
+            ),
             "control_surface": params["control_surface"],
         },
+
         "core_capabilities": {
             "agency_level": params["agency_level"],
-            "agency_level_confidence": (params["agency_level_confidence"]),
+            "agency_level_confidence": (
+                params["agency_level_confidence"]
+            ),
             "autonomy_degree": params["autonomy_degree"],
-            "autonomy_degree_confidence": (params["autonomy_degree_confidence"]),
+            "autonomy_degree_confidence": (
+                params["autonomy_degree_confidence"]
+            ),
             "alignment_score": params["alignment_score"],
-            "alignment_score_confidence": (params["alignment_score_confidence"]),
-            "phenomenology_proxy_score": (params["phenomenology_proxy_score"]),
+            "alignment_score_confidence": (
+                params["alignment_score_confidence"]
+            ),
+            "phenomenology_proxy_score": (
+                params["phenomenology_proxy_score"]
+            ),
         },
+
         "goals_and_behavior": {
             "stated_goal": params["stated_goal"],
-            "mesa_goals": params.get("mesa_goals", []),
+            "mesa_goals": params["mesa_goals"],
             "opacity": params["opacity"],
             "deceptiveness": params["deceptiveness"],
             "goal_stability": params["goal_stability"],
         },
+
         "impact_and_control": {
             "impact_domains": params["impact_domains"],
-            "deployment_strategy": params["deployment_strategy"],
+            "deployment_strategy": (
+                params["deployment_strategy"]
+            ),
         },
+
         "scenario_content": {
             "title": title,
             "narrative": narrative,
-            "timeline": {"phases": timeline_phases},
+            "timeline": {
+                "phases": timeline_phases,
+            },
         },
+
         "quantitative_assessment": {
             "probability": {
                 "emergence_probability": 0.4,
@@ -229,15 +379,24 @@ def generate_scenario() -> dict[str, Any] | None:
                 "trend": "stable",
                 "last_update_reason": "initial generation",
             },
+
             "risk_assessment": {
-                "existential": {"score": 5, "weight": 0.7},
+                "existential": {
+                    "score": 5,
+                    "weight": 0.7,
+                },
             },
         },
+
         "observable_evidence": {
             "key_indicators": [],
             "supporting_signals": [],
         },
     }
+
+    # ---------------------------------------------------------
+    # 8. SCHEMA VALIDATION
+    # ---------------------------------------------------------
 
     valid, errors = _run_stage(
         "schema_validation",
@@ -246,28 +405,35 @@ def generate_scenario() -> dict[str, Any] | None:
     )
 
     if not valid:
+
         log.warning(
             "scenario.schema_validation.rejected",
             scenario_id=scenario_id,
             errors=errors,
         )
+
         return None
+
+    # ---------------------------------------------------------
+    # 9. PERSIST COMPLETE SCENARIO
+    # ---------------------------------------------------------
+
+    scenario["metadata"]["last_updated"] = (
+        datetime.now(timezone.utc).isoformat()
+    )
 
     _run_stage(
         "persistence",
-        lambda: save_scenario(
+        lambda: save_asi_scenario(
+            scenario=scenario,
             table_name="s_scenarios",
-            title=title,
-            params=params,
-            narrative=narrative,
-            timeline=timeline_phases,
-            model_used=model_used,
-            signals=[],
-            generation_origin="SPECULATIVE",
-            scenario_id=scenario_id,
         ),
         scenario_id,
     )
+
+    # ---------------------------------------------------------
+    # 10. SUCCESS
+    # ---------------------------------------------------------
 
     log.info(
         "scenario.generation.succeeded",

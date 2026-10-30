@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # oasios/s_generator/cli_s.py
-
 """CLI entrypoint for speculative ASI scenario generation."""
 
 from typing import Annotated
