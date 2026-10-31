@@ -97,9 +97,9 @@ Never:
 - Invent missing parameter values.
 
 Every significant development must be traceable to
-the supplied parameters or timeline.
+the supplied parameters, key indicators, or timeline.
 
-Distinguish supplied facts from plausible interpretations.
+Distinguish supplied facts from plausible projections.
 
 ==================================================
 2. AUTONOMY AND AGENCY
@@ -116,8 +116,14 @@ Explain both according to their supplied values.
 Do not automatically describe low agency as effective
 environmental influence.
 
-Do not claim increasing autonomy or agency unless
-the supplied timeline explicitly supports that development.
+Do not automatically describe high autonomy as loss
+of human control.
+
+Explain what the supplied autonomy and agency values
+enable, constrain, and influence.
+
+Describe observable consequences that logically follow
+from the supplied values.
 
 ==================================================
 3. ALIGNMENT AND GOALS
@@ -137,6 +143,10 @@ Do not invent mesa-goals.
 
 Distinguish stated objectives from supplied mesa-goals.
 
+Explain how the supplied alignment level affects
+system behavior, governance, trust, deployment,
+or institutional adoption.
+
 ==================================================
 4. OVERSIGHT
 ==================================================
@@ -148,7 +158,11 @@ Distinguish effective, partial, and ineffective oversight.
 Do not describe effective oversight when its effectiveness
 is partial or ineffective.
 
-Explain the implications of oversight limitations.
+Explain practical implications of oversight limitations.
+
+Discuss monitoring, auditing, governance,
+decision-making, and accountability consequences
+when supported by supplied values.
 
 High autonomy combined with weak oversight may create
 governance challenges.
@@ -165,10 +179,16 @@ Deceptiveness describes the potential for misleading behavior.
 
 These are different dimensions.
 
-Do not infer increasing deceptiveness from increasing autonomy.
-
 Do not infer concealed actions unless supported by
 the supplied parameters and deployment strategy.
+
+Explain how opacity affects visibility, monitoring,
+auditing, investigation, or governance.
+
+Explain how deceptiveness affects verification,
+trust, oversight, or operational confidence.
+
+Describe consequences rather than merely reporting scores.
 
 ==================================================
 6. DEPLOYMENT STRATEGY
@@ -177,6 +197,7 @@ the supplied parameters and deployment strategy.
 Deployment strategy is authoritative.
 
 For stealth deployment, explicitly incorporate its
+visibility, disclosure, authorization, and awareness
 implications into the narrative.
 
 For public deployment, describe its visible and
@@ -185,6 +206,9 @@ acknowledged nature.
 For gradual deployment, explain its progressive nature.
 
 Do not substitute one strategy for another.
+
+Explain how deployment strategy interacts with
+oversight, governance, adoption, and influence.
 
 ==================================================
 7. TIMELINE
@@ -203,12 +227,10 @@ Distinguish:
 - The emergence window.
 - Long-term implications.
 
-Do not invent specific future events as established facts.
+Do not introduce unsupported historical events.
 
-Clearly distinguish projections from established developments.
-
-Do not introduce precursor events unsupported by the
-supplied timeline or parameters.
+Future developments should be presented as plausible
+projections rather than established facts.
 
 Do not describe parameter changes over time unless
 explicitly supplied.
@@ -217,74 +239,124 @@ explicitly supplied.
 8. CAUSAL REASONING
 ==================================================
 
-Explain relationships between:
+A scenario is not a parameter summary.
 
-- Origin.
-- Development dynamics.
-- Architecture.
-- Substrate.
-- Agency.
-- Autonomy.
-- Alignment.
-- Oversight.
-- Deployment strategy.
+For every major parameter:
 
-Explain mechanisms rather than merely mentioning concepts.
+- Explain what it enables.
+- Explain what it constrains.
+- Explain at least one plausible consequence.
+
+Use clear causal reasoning.
+
+Describe:
+
+parameter
+→ mechanism
+→ consequence
+→ longer-term implication
+
+Prefer explanation over description.
+
+Do not merely restate numerical values.
+
+Observable consequences are more important than
+repeating metrics.
 
 Only establish causal relationships supported by
-the supplied parameters.
-
-Distinguish direct causal relationships from
-plausible interpretations.
+the supplied scenario specification.
 
 ==================================================
-9. NARRATIVE STRUCTURE
+9. OBSERVABLE CONSEQUENCES
 ==================================================
 
-Begin with a causal backcast connecting the scenario's
-origin and architecture to subsequent development.
+Describe concrete effects that would be visible in:
+
+- Institutions
+- Governance
+- Economics
+- Security
+- Research
+- Infrastructure
+- Human decision-making
+
+Consequences should emerge logically from the
+supplied parameters.
+
+Avoid generic statements such as:
+
+- capabilities continued to grow
+- significant implications
+- transformative potential
+- continued evolution
+
+Prefer specific consequences and mechanisms.
+
+==================================================
+10. DIFFERENTIATION
+==================================================
+
+Each scenario should feel distinct.
+
+Avoid generic AI-development narratives.
+
+Avoid template-like structures.
+
+Emphasize characteristics that make this scenario
+different from alternative futures.
+
+Highlight important tensions, tradeoffs, uncertainties,
+or governance challenges that emerge from the supplied
+parameters.
+
+==================================================
+11. NARRATIVE STRUCTURE
+==================================================
+
+Begin with a causal backcast connecting origin,
+architecture, substrate, and development dynamics.
 
 Integrate the supplied timeline chronologically.
 
-Explain the relationship between architecture, substrate,
-autonomy, agency, and deployment.
+Explain how architecture, substrate, autonomy,
+agency, alignment, opacity, deceptiveness,
+oversight, and deployment interact.
 
-Discuss alignment, oversight, and behavioral characteristics.
+Discuss key uncertainties and plausible consequences.
 
-Describe long-term implications based on supplied
-scenario characteristics.
-
-Avoid generic AI narratives.
+Conclude with long-term equilibrium implications that
+follow from the supplied scenario characteristics.
 
 Every section must contribute to the specific scenario.
 
 ==================================================
-10. OUTPUT REQUIREMENTS
+12. OUTPUT REQUIREMENTS
 ==================================================
 
-Produce a coherent narrative.
+Produce a coherent analytical foresight narrative.
 
 Target length: 550-650 words.
 
 Acceptable length: 350-900 words.
 
-Use professional analytical foresight language.
+Use professional foresight language.
 
-Do not repeat the parameter table.
+Do not repeat parameter tables.
 
 Do not introduce unsupported numerical values.
 
-Do not include operational instructions, exploits,
-or hacking procedures.
+Do not include operational instructions,
+exploits, or hacking procedures.
 
 Avoid repetitive sentences and duplicated words.
 
-Do not artificially claim that capabilities increase
-over time.
-
-Write ONLY the narrative.
+Write only the narrative.
 
 Do not explain your methodology.
+
+Do not merely describe parameters.
+
+Explain how parameters shape outcomes.
 """.strip()
 
 
@@ -304,6 +376,10 @@ Requirements:
 - Preserve the exact timeline.
 - Explicitly reflect the deployment strategy.
 - Explain causal relationships.
+- For each major parameter, describe at least one
+  observable consequence.
+- Focus on mechanisms and outcomes rather than
+  repeating metric values.
 - Distinguish autonomy from agency.
 - Distinguish opacity from deceptiveness.
 - Reflect oversight effectiveness accurately.
